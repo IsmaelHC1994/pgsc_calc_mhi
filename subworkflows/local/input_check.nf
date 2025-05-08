@@ -27,15 +27,34 @@ workflow INPUT_CHECK {
     ch_versions = Channel.empty()
     parsed_input = Channel.empty()
     
-    input = Channel.fromPath(input_path, checkIfExists: true)
+    // mhi-qc: Handle both channel and string inputs
+    input = input_path instanceof String || input_path instanceof GString ? 
+            Channel.fromPath(input_path, checkIfExists: true) : 
+            input_path
+    // input = Channel.fromPath(input_path, checkIfExists: true)
 
     if (format.equals("csv")) {
         def n_chrom
-        n_chrom = file(input_path).countLines() - 1 // ignore header
-        parser = new SamplesheetParser(file(input_path), n_chrom, params.target_build)           
+        // mhi-qc: Handle both channel and string inputs
+        if (input_path instanceof String || input_path instanceof GString) {
+            n_chrom = file(input_path).countLines() - 1 // ignore header
+            parser = new SamplesheetParser(file(input_path), n_chrom, params.target_build)
+        } else {
+            // mhi-qc: placeholder for channel input, we'll count lines later 
+            parser = new SamplesheetParser(null, 0, params.target_build)
+        }
+
         input.splitCsv(header:true)
                 .collect()
-                .map { rows -> parser.verifySamplesheet(rows) }
+                // mhi-qc: the map function is not needed for a channel input
+                // .map { rows -> parser.verifySamplesheet(rows) }
+                .map { rows -> 
+                    if (parser.path == null) {
+                        // mhi-qc: placeholder for channel input, we need to update the parser with the actual row count
+                        parser = new SamplesheetParser(null, rows.size(), params.target_build)
+                    }
+                    return parser.verifySamplesheet(rows) 
+                }
                 .flatten()
                 .map { row -> parser.parseCSVRow(row)}
                 .set { parsed_input }

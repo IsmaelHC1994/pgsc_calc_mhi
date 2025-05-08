@@ -145,239 +145,264 @@ include { DUMPSOFTWAREVERSIONS } from '../modules/local/dumpsoftwareversions'
 */
 
 workflow PGSCCALC {
-    ch_versions = Channel.empty()
-
-    // some workflows require an optional input
-    // let's make one, and reuse it where possible
-    // see https://nextflow-io.github.io/patterns/optional-input/ which explains this odd implementation pattern
-    // these dummy files need to exist for cloud executors to work OK
-    optional_input = file(projectDir / "assets" / "NO_FILE", checkIfExists: true)
-
-    //
-    // SUBWORKFLOW: Create reference database for ancestry inference
-    //
-    if (run_ancestry_bootstrap) {
-        if (params.run_ancestry) {
-            log.info "Reference database provided: skipping bootstrap"
-            ch_reference = Channel.fromPath(params.run_ancestry, checkIfExists: true)
-        } else {
-            log.info "Creating ancestry database from source data"
-            reference_samplesheet = Channel.fromPath(params.ref_samplesheet)
-            BOOTSTRAP_ANCESTRY ( reference_samplesheet )
-            ch_reference = BOOTSTRAP_ANCESTRY.out.reference_database
-            ch_versions = ch_versions.mix(BOOTSTRAP_ANCESTRY.out.versions)
+    take:
+        samplesheet // mhi-qc: Optional samplesheet from MHI-QC workflow
+        
+    main:
+        ch_versions = Channel.empty()
+        
+        // mhi-qc: determine whether to use the QC samplesheet or params.input:
+        ch_input = samplesheet == null || (samplesheet instanceof Object && samplesheet.toString() == "null") ? 
+            Channel.value(params.input) : 
+            samplesheet
+        
+        // mhi-qc: Log input being used
+        ch_input.first().view { input ->
+            log.info "Using input for PGSC_CALC: ${input}"
+            return input
         }
-    }
+        
+        // some workflows require an optional input
+        // let's make one, and reuse it where possible
+        // see https://nextflow-io.github.io/patterns/optional-input/ which explains this odd implementation pattern
+        // these dummy files need to exist for cloud executors to work OK
+        optional_input = file(projectDir / "assets" / "NO_FILE", checkIfExists: true)
 
-    //
-    // SUBWORKFLOW: Get scoring file from PGS Catalog accession
-    //
-    ch_scores = Channel.empty()
-    if (params.scorefile) {
-        ch_scores = ch_scores.mix(Channel.fromPath(params.scorefile, checkIfExists: true))
-    }
-
-    // make sure accessions look sensible before querying PGS Catalog
-    def pgs_id = WorkflowPgscCalc.prepareAccessions(params.pgs_id, "pgs_id")
-    def pgp_id = WorkflowPgscCalc.prepareAccessions(params.pgp_id, "pgp_id")
-    
-    // temporarily handle parameter synonym (--trait_efo -> --efo_id) 
-    def traits = [params.trait_efo, params.efo_id].findAll { it != null }.join(",")
-    
-    if (params.trait_efo) {
-        println "WARNING: --trait_efo is deprecated and will be removed in a future release, please use --efo_id"
-    }
-
-    def trait_efo = WorkflowPgscCalc.prepareAccessions(traits, "trait_efo")
-    
-    def accessions = pgs_id + pgp_id + trait_efo
-
-    if (!accessions.every { it.value == "" }) {
-        DOWNLOAD_SCOREFILES(accessions, params.target_build)
-        ch_versions = ch_versions.mix(DOWNLOAD_SCOREFILES.out.versions)
-        ch_scores = ch_scores.mix(DOWNLOAD_SCOREFILES.out.scorefiles)
-    }
-
-    if (!params.scorefile && accessions.every { it.value == "" }) {
-        Nextflow.error("No valid accessions or scoring files provided. Please double check --pgs_id, --pgp_id, --trait_efo, or --scorefile parameters")
-    }
-
-    //
-    // SUBWORKFLOW: Validate and stage input files
-    //
-
-    if (run_input_check) {
-        // flatten the score channel
-        ch_scorefiles = ch_scores.collect()
-        // chain files are optional input
-        Channel.fromPath(optional_input).set { chain_files }
-        if (params.hg19_chain && params.hg38_chain) {
-            Channel.fromPath(params.hg19_chain, checkIfExists: true)
-                .mix(Channel.fromPath(params.hg38_chain, checkIfExists: true))
-                .collect()
-                .set { chain_files }
-        }
-
-        INPUT_CHECK (
-            params.input,
-            params.format,
-            ch_scorefiles,
-            chain_files
-        )
-        ch_versions = ch_versions.mix(INPUT_CHECK.out.versions)
-    }
-
-    //
-    // SUBWORKFLOW: Make scoring file and target genomic data compatible
-    //
-
-    if (run_make_compatible) {
-        MAKE_COMPATIBLE (
-            INPUT_CHECK.out.geno,
-            INPUT_CHECK.out.pheno,
-            INPUT_CHECK.out.variants,
-            INPUT_CHECK.out.vcf,
-
-        )
-        ch_versions = ch_versions.mix(MAKE_COMPATIBLE.out.versions)
-    }
-
-
-    //
-    // SUBWORKFLOW: Run ancestry projection
-    //
-
-    // this process has two optional inputs:
-    // - reference allelic frequencies 
-    // - intersect counts
-    // optional inputs need different names to prevent collisions during stage in
-    optional_intersect_count = file(projectDir / "assets" / "NO_FILE_INTERSECT_COUNT", checkIfExists: true)
-    ref_afreq = Channel.value([[:], optional_input])
-    intersect_count = Channel.fromPath(optional_intersect_count, checkIfExists: true)
-
-    if (run_ancestry_assign) {
-        intersection = Channel.empty()
-        ref_geno = Channel.empty()
-        ref_pheno = Channel.empty()
-        ref_var = Channel.empty()
-
-        ANCESTRY_PROJECT (
-            MAKE_COMPATIBLE.out.geno,
-            MAKE_COMPATIBLE.out.pheno,
-            MAKE_COMPATIBLE.out.variants,
-            MAKE_COMPATIBLE.out.vmiss,
-            MAKE_COMPATIBLE.out.afreq,
-            ch_reference,
-            params.target_build
-        )
-        ch_versions = ch_versions.mix(ANCESTRY_PROJECT.out.versions)
-        intersection = intersection.mix(ANCESTRY_PROJECT.out.intersection)
-        ref_geno = ref_geno.mix(ANCESTRY_PROJECT.out.ref_geno)
-        ref_pheno = ref_pheno.mix(ANCESTRY_PROJECT.out.ref_pheno)
-        ref_var = ref_var.mix(ANCESTRY_PROJECT.out.ref_var)
-        intersect_count = ANCESTRY_PROJECT.out.intersect_count
-
-        if (params.load_afreq) {
-            ref_afreq = ANCESTRY_PROJECT.out.ref_afreq
-        }
-    }
-
-    //
-    // SUBWORKFLOW: Match scoring files against target genomes
-    //
-    if (run_match) {
-        if (run_ancestry_assign) {
-            // intersected variants ( across ref & target ) are an optional input
-            intersection = ANCESTRY_PROJECT.out.intersection
-        } else {
-            dummy_input = Channel.of(optional_input) // dummy file that doesn't exist
-            // associate each sampleset with the dummy file
-            MAKE_COMPATIBLE.out.geno.map {
-                def meta = [:].plus(it[0])
-                meta = meta.subMap(['id'])
-                // one dummy file for groupTuple() size in match subworkflow
-                meta.n_chrom = 1
-                return meta
+        //
+        // SUBWORKFLOW: Create reference database for ancestry inference
+        //
+        if (run_ancestry_bootstrap) {
+            if (params.run_ancestry) {
+                log.info "Reference database provided: skipping bootstrap"
+                ch_reference = Channel.fromPath(params.run_ancestry, checkIfExists: true)
+            } else {
+                log.info "Creating ancestry database from source data"
+                reference_samplesheet = Channel.fromPath(params.ref_samplesheet)
+                BOOTSTRAP_ANCESTRY ( reference_samplesheet )
+                ch_reference = BOOTSTRAP_ANCESTRY.out.reference_database
+                ch_versions = ch_versions.mix(BOOTSTRAP_ANCESTRY.out.versions)
             }
-                .unique()
-                .combine(dummy_input)
-                .set { intersection }
         }
 
-        MATCH (
-            MAKE_COMPATIBLE.out.geno,
-            MAKE_COMPATIBLE.out.pheno,
-            MAKE_COMPATIBLE.out.variants,
-            INPUT_CHECK.out.scorefiles,
-            intersection
-        )
-        ch_versions = ch_versions.mix(MATCH.out.versions)
-    }
+        //
+        // SUBWORKFLOW: Get scoring file from PGS Catalog accession
+        //
+        ch_scores = Channel.empty()
+        if (params.scorefile) {
+            ch_scores = ch_scores.mix(Channel.fromPath(params.scorefile, checkIfExists: true))
+        }
+
+        // make sure accessions look sensible before querying PGS Catalog
+        def pgs_id = WorkflowPgscCalc.prepareAccessions(params.pgs_id, "pgs_id")
+        def pgp_id = WorkflowPgscCalc.prepareAccessions(params.pgp_id, "pgp_id")
+        
+        // temporarily handle parameter synonym (--trait_efo -> --efo_id) 
+        def traits = [params.trait_efo, params.efo_id].findAll { it != null }.join(",")
+        
+        if (params.trait_efo) {
+            println "WARNING: --trait_efo is deprecated and will be removed in a future release, please use --efo_id"
+        }
+
+        def trait_efo = WorkflowPgscCalc.prepareAccessions(traits, "trait_efo")
+        
+        def accessions = pgs_id + pgp_id + trait_efo
+
+        if (!accessions.every { it.value == "" }) {
+            DOWNLOAD_SCOREFILES(accessions, params.target_build)
+            ch_versions = ch_versions.mix(DOWNLOAD_SCOREFILES.out.versions)
+            ch_scores = ch_scores.mix(DOWNLOAD_SCOREFILES.out.scorefiles)
+        }
+
+        if (!params.scorefile && accessions.every { it.value == "" }) {
+            Nextflow.error("No valid accessions or scoring files provided. Please double check --pgs_id, --pgp_id, --trait_efo, or --scorefile parameters")
+        }
+
+        //
+        // SUBWORKFLOW: Validate and stage input files
+        //
+
+        if (run_input_check) {
+            // flatten the score channel
+            ch_scorefiles = ch_scores.collect()
+            // chain files are optional input
+            Channel.fromPath(optional_input).set { chain_files }
+            if (params.hg19_chain && params.hg38_chain) {
+                Channel.fromPath(params.hg19_chain, checkIfExists: true)
+                    .mix(Channel.fromPath(params.hg38_chain, checkIfExists: true))
+                    .collect()
+                    .set { chain_files }
+            }
+
+            INPUT_CHECK (
+                // mhi-qc: use the QC samplesheet (ch_input) or params.input (also ch_input):
+                ch_input, // mhi-qc: original was directly from params.input
+                params.format,
+                ch_scorefiles,
+                chain_files
+            )
+            ch_versions = ch_versions.mix(INPUT_CHECK.out.versions)
+        }
+
+        //
+        // SUBWORKFLOW: Make scoring file and target genomic data compatible
+        //
+
+        if (run_make_compatible) {
+            MAKE_COMPATIBLE (
+                INPUT_CHECK.out.geno,
+                INPUT_CHECK.out.pheno,
+                INPUT_CHECK.out.variants,
+                INPUT_CHECK.out.vcf,
+
+            )
+            ch_versions = ch_versions.mix(MAKE_COMPATIBLE.out.versions)
+        }
 
 
-    //
-    // SUBWORKFLOW: Apply a scoring file to target genomic data
-    //
+        //
+        // SUBWORKFLOW: Run ancestry projection
+        //
 
-    if (run_apply_score) {
+        // this process has two optional inputs:
+        // - reference allelic frequencies 
+        // - intersect counts
+        // optional inputs need different names to prevent collisions during stage in
+        optional_intersect_count = file(projectDir / "assets" / "NO_FILE_INTERSECT_COUNT", checkIfExists: true)
+        ref_afreq = Channel.value([[:], optional_input])
+        intersect_count = Channel.fromPath(optional_intersect_count, checkIfExists: true)
+
         if (run_ancestry_assign) {
-            MAKE_COMPATIBLE.out.geno
-                .mix( ref_geno )
-                .set { ch_geno }
+            intersection = Channel.empty()
+            ref_geno = Channel.empty()
+            ref_pheno = Channel.empty()
+            ref_var = Channel.empty()
 
-            MAKE_COMPATIBLE.out.pheno
-                .mix( ref_pheno )
-                .set { ch_pheno }
+            ANCESTRY_PROJECT (
+                MAKE_COMPATIBLE.out.geno,
+                MAKE_COMPATIBLE.out.pheno,
+                MAKE_COMPATIBLE.out.variants,
+                MAKE_COMPATIBLE.out.vmiss,
+                MAKE_COMPATIBLE.out.afreq,
+                ch_reference,
+                params.target_build
+            )
+            ch_versions = ch_versions.mix(ANCESTRY_PROJECT.out.versions)
+            intersection = intersection.mix(ANCESTRY_PROJECT.out.intersection)
+            ref_geno = ref_geno.mix(ANCESTRY_PROJECT.out.ref_geno)
+            ref_pheno = ref_pheno.mix(ANCESTRY_PROJECT.out.ref_pheno)
+            ref_var = ref_var.mix(ANCESTRY_PROJECT.out.ref_var)
+            intersect_count = ANCESTRY_PROJECT.out.intersect_count
 
-            MAKE_COMPATIBLE.out.variants
-                .mix( ref_var )
-                .set { ch_variants }
-        } else {
-            MAKE_COMPATIBLE.out.geno.set { ch_geno }
-            MAKE_COMPATIBLE.out.pheno.set { ch_pheno }
-            MAKE_COMPATIBLE.out.variants.set { ch_variants }
+            if (params.load_afreq) {
+                ref_afreq = ANCESTRY_PROJECT.out.ref_afreq
+            }
         }
 
-        APPLY_SCORE (
-            ch_geno,
-            ch_pheno,
-            ch_variants,
-            intersection,
-            MATCH.out.scorefiles,
-            ref_afreq
-        )
-        ch_versions = ch_versions.mix(APPLY_SCORE.out.versions)
-    }
+        //
+        // SUBWORKFLOW: Match scoring files against target genomes
+        //
+        if (run_match) {
+            if (run_ancestry_assign) {
+                // intersected variants ( across ref & target ) are an optional input
+                intersection = ANCESTRY_PROJECT.out.intersection
+            } else {
+                dummy_input = Channel.of(optional_input) // dummy file that doesn't exist
+                // associate each sampleset with the dummy file
+                MAKE_COMPATIBLE.out.geno.map {
+                    def meta = [:].plus(it[0])
+                    meta = meta.subMap(['id'])
+                    // one dummy file for groupTuple() size in match subworkflow
+                    meta.n_chrom = 1
+                    return meta
+                }
+                    .unique()
+                    .combine(dummy_input)
+                    .set { intersection }
+            }
 
-    if (run_report) {
-        projections = Channel.empty()
-        relatedness = Channel.empty()
-        report_pheno = Channel.empty()
-
-        if (run_ancestry_assign) {
-            projections = projections.mix(ANCESTRY_PROJECT.out.projections)
-            relatedness = relatedness.mix(ANCESTRY_PROJECT.out.relatedness)
-            report_pheno = report_pheno.mix(ref_pheno)
+            MATCH (
+                MAKE_COMPATIBLE.out.geno,
+                MAKE_COMPATIBLE.out.pheno,
+                MAKE_COMPATIBLE.out.variants,
+                INPUT_CHECK.out.scorefiles,
+                intersection
+            )
+            ch_versions = ch_versions.mix(MATCH.out.versions)
         }
 
-        REPORT (
-            report_pheno,
-            relatedness,
-            APPLY_SCORE.out.scores,
-            projections,
-            INPUT_CHECK.out.log_scorefiles,
-            MATCH.out.db,
-            run_ancestry_assign,
-            intersect_count
+
+        //
+        // SUBWORKFLOW: Apply a scoring file to target genomic data
+        //
+
+        if (run_apply_score) {
+            if (run_ancestry_assign) {
+                MAKE_COMPATIBLE.out.geno
+                    .mix( ref_geno )
+                    .set { ch_geno }
+
+                MAKE_COMPATIBLE.out.pheno
+                    .mix( ref_pheno )
+                    .set { ch_pheno }
+
+                MAKE_COMPATIBLE.out.variants
+                    .mix( ref_var )
+                    .set { ch_variants }
+            } else {
+                MAKE_COMPATIBLE.out.geno.set { ch_geno }
+                MAKE_COMPATIBLE.out.pheno.set { ch_pheno }
+                MAKE_COMPATIBLE.out.variants.set { ch_variants }
+            }
+
+            APPLY_SCORE (
+                ch_geno,
+                ch_pheno,
+                ch_variants,
+                intersection,
+                MATCH.out.scorefiles,
+                ref_afreq
+            )
+            ch_versions = ch_versions.mix(APPLY_SCORE.out.versions)
+        }
+
+        if (run_report) {
+            projections = Channel.empty()
+            relatedness = Channel.empty()
+            report_pheno = Channel.empty()
+
+            if (run_ancestry_assign) {
+                projections = projections.mix(ANCESTRY_PROJECT.out.projections)
+                relatedness = relatedness.mix(ANCESTRY_PROJECT.out.relatedness)
+                report_pheno = report_pheno.mix(ref_pheno)
+            }
+
+            REPORT (
+                report_pheno,
+                relatedness,
+                APPLY_SCORE.out.scores,
+                projections,
+                INPUT_CHECK.out.log_scorefiles,
+                MATCH.out.db,
+                run_ancestry_assign,
+                intersect_count
+            )
+        }
+
+
+        // MODULE: Dump software versions for all tools used in the workflow
+        //
+        DUMPSOFTWAREVERSIONS (
+            ch_versions.unique().collectFile(name: 'collated_versions.yml')
         )
-    }
 
-
-    // MODULE: Dump software versions for all tools used in the workflow
-    //
-    DUMPSOFTWAREVERSIONS (
-        ch_versions.unique().collectFile(name: 'collated_versions.yml')
-    )
+        //
+        // mhi-qc: WORKFLOW OUTPUT CHANNELS (added to continue with the GENERATE_REPORTS process)
+        //
+        emit:
+        versions = ch_versions
+        // Add these new emit statements to expose score files and ancestry information
+        score_files = run_ancestry_assign ? REPORT.out.score_files : APPLY_SCORE.out.scores
+        ancestry_results = run_ancestry_assign ? REPORT.out.ancestry_results : Channel.empty()
 }
 
 /*

@@ -1,0 +1,484 @@
+---
+title: "PGS Report"
+format:
+  pdf:
+    documentclass: article
+    classoption: [a4paper, 12pt]
+    toc: true  # Add table of contents for multiple scores
+    fig-width: 8
+    fig-height: 6
+    fig-pos: "H"
+    geometry:
+      - margin=0.75in
+    keep-tex: true
+    include-in-header:
+      text: |
+        \usepackage{fvextra}
+        \usepackage{float}
+        \usepackage{graphicx}
+        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+          commandchars=\\\{\},
+          breaklines, breaknonspaceingroup, breakanywhere}
+        \usepackage{titling}
+        \pretitle{\begin{center}\LARGE\bfseries}
+        \posttitle{\end{center}}
+        \preauthor{\begin{center}\large}
+        \postauthor{\end{center}}
+        \predate{\begin{center}\large}
+        \postdate{\end{center}}
+execute:
+  cache: false
+  freeze: auto
+params:
+  patient_id: "default"
+---
+
+```{r title-display, echo=FALSE, results='asis'}
+#| label: title-display
+cat('\\title{PGS Report for Patient ', params$patient_id, '}')
+cat('\\date{}')
+cat('\\maketitle')
+```
+
+```{r setup, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
+#| label: setup
+library(tidyverse)
+library(tidyplots)
+library(ggridges)
+library(patchwork)
+library(DT)
+library(viridis)
+library(readr)
+library(here)
+library(showtext)
+library(knitr)
+library(ggthemes)
+
+# Set up FontAwesome
+# Check if fonts directory exists directly or in assets/fonts
+if (dir.exists("fonts")) {
+  font_add('FontAwesome', 'fonts/fontawesome-webfont.ttf')
+} else if (dir.exists("assets/fonts")) {
+  font_add('FontAwesome', 'assets/fonts/fontawesome-webfont.ttf')
+} else {
+  warning("Font directory not found. FontAwesome not available.")
+}
+showtext_auto()
+
+# Helper function to create nicer labels
+nice_label <- function(x) {
+  x %>% 
+    str_replace_all("_", " ") %>%
+    str_to_title()
+}
+
+# Custom theme function for consistent plot styling
+custom_theme <- function() {
+  theme_pander() +
+    theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, hjust = 0.5),
+      axis.title = element_text(size = 12),
+      axis.text = element_text(size = 10),
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 10),
+      strip.text = element_text(size = 12),
+      plot.margin = margin(t = 5, r = 5, b = 10, l = 5),
+      panel.grid.major = element_line(color = "gray90", linewidth = 0.3),
+      panel.grid.minor = element_line(color = "gray95", linewidth = 0.2)
+    )
+}
+
+```
+
+```{r load-data, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
+#| label: load-data
+
+# test params$patient_id
+# assing 10003_10003 as test
+# params = list(patient_id = "10003")
+
+# Set paths
+score_files <- list.files(".", pattern = "pgs.txt", full.names = FALSE)
+popsim_files <- list.files(".", pattern = "popsimilarity.txt", full.names = FALSE)
+
+# Load score data
+scores <- read_tsv(file.path(score_files))
+
+# Load popsim data
+popsim <- read_tsv(file.path(popsim_files))
+
+# Get basic stats
+n_scores <- length(unique(scores$PGS))
+n_samples <- length(unique(scores$IID))
+
+# Create comprehensive run_patient_data with all necessary variables
+scores_popsim <- scores %>%
+  left_join(popsim %>% select(IID, MostSimilarPop), by = "IID") %>% 
+  # Create a simple ID column using the last part after underscore
+  mutate(simple_id = str_extract(IID, "[^_]+$"))
+
+# Calculate percentiles for each PGS score separately
+scores_popsim <- scores_popsim %>%
+  group_by(PGS) %>%
+  mutate(Overall_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
+  group_by(PGS, MostSimilarPop) %>%
+  mutate(Population_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
+  ungroup()
+
+run_patient_data <- scores_popsim %>%
+  filter(sampleset != "reference") %>%
+  head(64) # FIXME: should not matter, no more than 64 patients in the reference set should be present
+
+# Get reference data
+reference_data <- scores_popsim %>% filter(sampleset == "reference")
+
+# Look up full IID from simple ID
+full_patient_id <- scores_popsim %>%
+  filter(simple_id == params$patient_id) %>%
+  pull(IID) %>%
+  first()
+
+if (is.na(full_patient_id)) {
+  stop("Patient ID not found")
+}
+
+# Get all PGS scores for this patient
+patient_pgs_scores <- scores_popsim %>%
+  filter(IID == full_patient_id) %>%
+  pull(PGS) %>%
+  unique()
+
+# Save summary data to CSV
+patient_summary_all <- scores_popsim %>%
+  filter(IID == full_patient_id) %>%
+  select(IID, PGS, Z_MostSimilarPop, Overall_Percentile, Population_Percentile)
+
+write_csv(patient_summary_all, "patient_summaries.csv")
+```
+
+```{r functions, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
+#| label: functions
+
+# Function to create patient risk visualization with human icons
+create_patient_risk_viz <- function(patient_id, pgs_id = NULL, by_ancestry = FALSE) {
+  # Get patient data, filtered by PGS if provided
+  filtered_data <- if (!is.null(pgs_id)) {
+    scores_popsim %>% filter(PGS == pgs_id)
+  } else {
+    scores_popsim
+  }
+  
+  if(nrow(filtered_data %>% filter(IID == full_patient_id)) == 0) {
+    return(ggplot() + annotate("text", x = 0, y = 0, label = "Patient not found") + 
+           theme_void())
+  }
+
+  if(by_ancestry) {
+    patient_percentile <- filtered_data %>%
+      filter(IID == full_patient_id) %>%
+      pull(Population_Percentile)
+  } else {
+    patient_percentile <- filtered_data %>%
+      filter(IID == full_patient_id) %>%
+      pull(Overall_Percentile)
+  }
+  
+  # Create grid positions (10 rows x 10 columns)
+  n_rows <- 10
+  n_cols <- 10
+  grid_positions <- expand.grid(
+    row = 1:n_rows,
+    col = 1:n_cols
+  ) %>%
+    mutate(
+      percentile_range = case_when(
+        row == 1 ~ "0-10",
+        row == 10 ~ "91-100",
+        TRUE ~ paste0(((row - 1) * 10 + 1), "-", (row * 10))
+      ),
+      row_start = (row - 1) * 10,
+      row_end = row * 10,
+      is_patient_row = patient_percentile > row_start & patient_percentile <= row_end
+    )
+  
+  # Create the plot
+  ggplot(grid_positions, aes(x = col, y = row, color = is_patient_row)) +
+    annotate(
+      "segment",
+      x = n_cols + 1.2,
+      xend = n_cols + 1.2,
+      y = 1,
+      yend = n_rows,
+      arrow = arrow(length = unit(0.2, "cm"), ends = "last"),
+      color = "black"
+    ) +
+    geom_text(
+      label = "\uf007",
+      family = "FontAwesome",
+      size = 5,
+      vjust = 0.5,
+      hjust = 0.5,
+      show.legend = FALSE
+    ) +
+    scale_color_manual(values = c("FALSE" = "gray80", "TRUE" = "#3366CC")) +
+    scale_y_continuous(
+      breaks = 1:n_rows,
+      labels = c("0-10", "11-20", "21-30", "31-40", "41-50", 
+                "51-60", "61-70", "71-80", "81-90", "91-100"),
+      expand = expansion(mult = c(0.05, 0.05))  # Increased expansion to provide more space
+    ) +
+    scale_x_continuous(
+      expand = expansion(mult = c(0.02, 0.15)),
+      limits = c(0.5, n_cols + 1.5)
+    ) +
+    labs(
+      title = if(by_ancestry) "Within Ancestry Group" else "Overall Population",
+      subtitle = paste0(round(patient_percentile, 1), "th percentile"),
+      y = "Percentile Range",
+      x = NULL
+    ) +
+    theme_pander() +
+    theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 14, hjust = 0.5),
+      axis.title = element_text(size = 14),
+      axis.text = element_text(size = 12),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      legend.title = element_text(size = 14),
+      legend.text = element_text(size = 12),
+      strip.text = element_text(size = 14),
+      plot.margin = margin(t = 5, r = 5, b = 5, l = 5),
+      panel.grid.major = element_line(color = "gray90", linewidth = 0.3),
+      panel.grid.minor = element_line(color = "gray95", linewidth = 0.2)
+    ) +
+    annotate(
+      "text",
+      x = n_cols + 1.5,
+      y = n_rows,
+      label = "higher\nrisk",
+      hjust = 0,
+      vjust = 0.5,
+      size = 3.5
+    ) +
+    annotate(
+      "text",
+      x = n_cols + 1.5,
+      y = 1,
+      label = "lower\nrisk",
+      hjust = 0,
+      vjust = -0.5,
+      size = 3.5
+    ) 
+}
+
+# Function to create density plot for a patient
+create_density_plot <- function(patient_id, pgs_id = NULL) {
+  # Filter data by PGS if provided
+  filtered_data <- if (!is.null(pgs_id)) {
+    scores_popsim %>% filter(PGS == pgs_id)
+  } else {
+    scores_popsim
+  }
+  
+  ggplot() +
+    geom_density(
+      data = filtered_data,
+      aes(x = Z_MostSimilarPop),
+      fill = "gray80",
+      alpha = 0.5,
+      color = "black"
+    ) +
+    geom_density(
+      data = filtered_data,
+      aes(x = Z_MostSimilarPop, color = MostSimilarPop),
+      alpha = 0.8,
+      linewidth = 1
+    ) +
+    geom_vline(
+      data = filtered_data %>% filter(IID == full_patient_id),
+      aes(xintercept = Z_MostSimilarPop),
+      color = "red",
+      linetype = "dashed",
+      linewidth = 1
+    ) +
+    geom_text(
+      data = filtered_data %>% filter(IID == full_patient_id),
+      aes(x = Z_MostSimilarPop, y = max(density(filtered_data$Z_MostSimilarPop)$y) * 0.9, 
+          label = paste("Patient", params$patient_id)),
+      color = "red",
+      hjust = -0.1,
+      vjust = 0
+    ) +
+    labs(
+      title = "Distribution of PGS Scores by Ancestry Group",
+      x = "Z-Score (Most Similar Population)",
+      y = "Density",
+      color = "Ancestry Group"
+    ) +
+    custom_theme() +
+    scale_color_viridis_d()
+}
+
+# function to create a histogram of the PGS score
+# histogram + density lines, signal patient data point. 
+create_histogram_density_plot <- function(patient_id, pgs_id = NULL) {
+  # Filter data by PGS if provided
+  filtered_data <- if (!is.null(pgs_id)) {
+    scores_popsim %>% filter(PGS == pgs_id)
+  } else {
+    scores_popsim
+  }
+  
+  ggplot(filtered_data, aes(x = Z_MostSimilarPop)) +
+    geom_histogram(binwidth = 0.5, fill = "steelblue", alpha = 0.7) +
+  # Add vertical line for patient
+  geom_vline(
+    data = filtered_data %>% filter(IID == full_patient_id),
+    aes(xintercept = Z_MostSimilarPop),
+    color = "red",
+    linetype = "dashed",
+    linewidth = 1
+  ) +
+  # Add text annotation for patient
+  geom_text(
+    data = filtered_data %>% filter(IID == full_patient_id),
+    aes(x = Z_MostSimilarPop, y = max(density(filtered_data$Z_MostSimilarPop)$y) * 0.8, 
+        label = paste("Patient", patient_id)),
+    color = "red",
+    hjust = -0.1,
+    vjust = 0
+  ) +
+  labs(
+    title = "Distribution of PGS Scores",
+    subtitle = "Patient highlighted in red",
+    x = "Z-Score (Most Similar Population)",
+    y = "Frequency"
+  ) +
+  custom_theme()
+}
+
+# boxplot of the PGS score with patient placement
+create_boxplot <- function(patient_id, pgs_id = NULL) {
+  # Filter data by PGS if provided
+  filtered_data <- if (!is.null(pgs_id)) {
+    scores_popsim %>% filter(PGS == pgs_id)
+  } else {
+    scores_popsim
+  }
+  
+  ggplot(filtered_data, aes(x = PGS, y = Z_MostSimilarPop)) +
+    # Add boxplot
+    geom_boxplot(alpha = 0.7, width = 0.5) +
+  # Highlight patient point
+  geom_point(
+    data = filtered_data %>% filter(IID == full_patient_id),
+    size = 4,
+    shape = 17,
+    color = "red"
+  ) +
+  # Add mean line
+  stat_summary(
+    fun = mean,
+    geom = "crossbar",
+    width = 0.5,
+    size = 0.5,
+    color = "darkblue"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90")
+  ) +
+  labs(
+    title = "PGS Score Distribution",
+    subtitle = paste("Patient", patient_id, "highlighted in red"),
+    x = NULL,
+    y = "PGS Score (Z_MostSimilarPop)"
+  ) +
+  custom_theme()
+}
+
+```
+
+# Overall Summary
+
+```{r overall-summary, echo=FALSE, warning=FALSE, message=FALSE}
+# Display summary of all PGS scores for this patient
+patient_summary_table <- scores_popsim %>%
+  filter(IID == full_patient_id) %>%
+  select(PGS, Z_MostSimilarPop, Overall_Percentile, Population_Percentile) %>%
+  rename(
+    "Score Type" = PGS,
+    "Score" = Z_MostSimilarPop,
+    "Overall Percentile" = Overall_Percentile,
+    "Ancestry Percentile" = Population_Percentile
+  )
+
+# For PDF output, use kable
+knitr::kable(patient_summary_table, format = "latex", booktabs = TRUE, digits = 2, align = "c", 
+             caption = paste("Summary of all PGS scores for Patient", params$patient_id))
+```
+
+```{r generate-sections, results='asis', echo=FALSE, warning=FALSE, message=FALSE}
+# Loop through each PGS score and create a section for it
+for (pgs_id in patient_pgs_scores) {
+  # Create section header
+  cat("\n\n# Analysis for PGS Score:", pgs_id, "\n\n")
+  
+  # Create patient summary subsection for this specific PGS
+  cat("## Patient Summary for", pgs_id, "\n\n")
+  
+  # Display patient summary for this score in a table
+  patient_score_summary <- scores_popsim %>%
+    filter(IID == full_patient_id, PGS == pgs_id) %>%
+    select(Z_MostSimilarPop, Overall_Percentile, Population_Percentile) %>%
+    rename(
+      "Score" = Z_MostSimilarPop,
+      "Overall Percentile" = Overall_Percentile,
+      "Ancestry Percentile" = Population_Percentile
+    )
+  
+  # Print summary table for this score
+  print(knitr::kable(patient_score_summary, format = "latex", booktabs = TRUE, digits = 2, align = "c"))
+  
+  # Risk visualization section
+  cat("\n\n## Risk Visualization for", pgs_id, "\n\n")
+  
+  # Create both risk visualization plots for this score
+  p1 <- create_patient_risk_viz(params$patient_id, pgs_id, by_ancestry = TRUE)
+  p2 <- create_patient_risk_viz(params$patient_id, pgs_id, by_ancestry = FALSE)
+  
+  # Combine plots with patchwork
+  combined_plot <- p1 + p2 +
+    plot_layout(widths = c(1, 1)) +
+    plot_annotation(
+      title = paste("Risk Percentile for", pgs_id),
+      theme = theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 18))
+    )
+  
+  print(combined_plot)
+  
+  # Score distribution section
+  cat("\n\n## Score Distribution for", pgs_id, "\n\n")
+  
+  # Create and print boxplot
+  cat("### Boxplot of scores\n\n")
+  print(create_boxplot(params$patient_id, pgs_id))
+  
+  # Create and print histogram
+  cat("### Score histogram\n\n")
+  print(create_histogram_density_plot(params$patient_id, pgs_id))
+  
+  # Create and print density plot
+  cat("### Score distribution by ancestry\n\n")
+  print(create_density_plot(params$patient_id, pgs_id))
+}
+``` 
+

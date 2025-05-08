@@ -94,6 +94,9 @@ workflow REPORT {
 
     emit:
     versions = ch_versions
+    // mhi-qc: added to continue with the GENERATE_REPORTS process
+    score_files = ch_scores
+    ancestry_results = ancestry_results
 }
 
 def annotate_sampleset(it) {
