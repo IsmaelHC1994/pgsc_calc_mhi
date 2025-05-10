@@ -54,10 +54,20 @@ process GENERATE_REPORTS {
     path(result_files)
     
     output:
-    path "patient_reports/**"
+    path "patient*.html"
     
     script:
     """
+    # Create cache directories in the working directory
+    mkdir -p .deno_cache
+    mkdir -p .quarto_cache
+    mkdir -p .xdg_cache
+    
+    # Set environment variables for cache directories
+    export DENO_DIR=\${PWD}/.deno_cache
+    export QUARTO_CACHE_DIR=\${PWD}/.quarto_cache
+    export XDG_CACHE_HOME=\${PWD}/.xdg_cache
+    
     # Create directory for patient reports
     mkdir -p patient_reports
     
@@ -98,11 +108,6 @@ process GENERATE_REPORTS {
         echo "Found R script: ${projectDir}/bin/generate_patient_reports.R"
         # Execute the R script from the current directory
         Rscript ${projectDir}/bin/generate_patient_reports.R
-    else
-        echo "Error: R script not found at ${projectDir}/bin/generate_patient_reports.R"
-        echo "Creating placeholder report"
-        echo "Files processed:" > patient_reports/placeholder.txt
-        ls -la >> patient_reports/placeholder.txt
     fi
     """
 }

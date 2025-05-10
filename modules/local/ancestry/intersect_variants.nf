@@ -1,6 +1,8 @@
 process INTERSECT_VARIANTS {
     // labels are defined in conf/modules.config
-    label 'process_single'
+    // label 'process_single'
+    // mhi-qc: process single runs OoM
+    label 'process_low'
     label 'pgscatalog_utils' // controls conda, docker, + singularity options
 
     tag "$meta.id chromosome $meta.chrom"

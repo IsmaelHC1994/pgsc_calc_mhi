@@ -1,31 +1,17 @@
 ---
 title: "PGS Report"
 format:
-  pdf:
-    documentclass: article
-    classoption: [a4paper, 12pt]
+  html:
     toc: true  # Add table of contents for multiple scores
+    embed-resources: true  # Make self-contained HTML with all resources embedded
+    self-contained: true  # Ensure all resources are embedded
     fig-width: 8
     fig-height: 6
-    fig-pos: "H"
-    geometry:
-      - margin=0.75in
-    keep-tex: true
-    include-in-header:
-      text: |
-        \usepackage{fvextra}
-        \usepackage{float}
-        \usepackage{graphicx}
-        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
-          commandchars=\\\{\},
-          breaklines, breaknonspaceingroup, breakanywhere}
-        \usepackage{titling}
-        \pretitle{\begin{center}\LARGE\bfseries}
-        \posttitle{\end{center}}
-        \preauthor{\begin{center}\large}
-        \postauthor{\end{center}}
-        \predate{\begin{center}\large}
-        \postdate{\end{center}}
+    theme: default
+    code-fold: true
+    code-tools: false
+    fig-dpi: 300
+    standalone: true
 execute:
   cache: false
   freeze: auto
@@ -33,23 +19,16 @@ params:
   patient_id: "default"
 ---
 
-```{r title-display, echo=FALSE, results='asis'}
-#| label: title-display
-cat('\\title{PGS Report for Patient ', params$patient_id, '}')
-cat('\\date{}')
-cat('\\maketitle')
-```
-
 ```{r setup, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
 #| label: setup
 library(tidyverse)
-library(tidyplots)
-library(ggridges)
+# library(tidyplots) # Removed, theme_pander() is in ggthemes
+# library(ggridges)  # Removed, no clear usage
 library(patchwork)
-library(DT)
+# library(DT)         # Removed, knitr::kable is used
 library(viridis)
-library(readr)
-library(here)
+# library(readr)     # Removed, part of tidyverse
+# library(here)      # Removed, no clear usage
 library(showtext)
 library(knitr)
 library(ggthemes)
@@ -421,8 +400,8 @@ patient_summary_table <- scores_popsim %>%
     "Ancestry Percentile" = Population_Percentile
   )
 
-# For PDF output, use kable
-knitr::kable(patient_summary_table, format = "latex", booktabs = TRUE, digits = 2, align = "c", 
+# For HTML output, use kable
+knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c", 
              caption = paste("Summary of all PGS scores for Patient", params$patient_id))
 ```
 
@@ -445,8 +424,8 @@ for (pgs_id in patient_pgs_scores) {
       "Ancestry Percentile" = Population_Percentile
     )
   
-  # Print summary table for this score
-  print(knitr::kable(patient_score_summary, format = "latex", booktabs = TRUE, digits = 2, align = "c"))
+  # Print summary table for this score with HTML formatting
+  print(knitr::kable(patient_score_summary, format = "html", digits = 2, align = "c"))
   
   # Risk visualization section
   cat("\n\n## Risk Visualization for", pgs_id, "\n\n")

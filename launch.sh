@@ -3,9 +3,16 @@
 export NXF_ANSI_LOG=false
 export NXF_OPTS="-Xms500M -Xmx2G"
 
+# Create log directory if it doesn't exist
+mkdir -p logs
+
+# Define log file with timestamp
+LOG_FILE="logs/pgsc_calc_$(date +%Y-%m-%d_%H-%M-%S).log"
+
 module load nextflow
 module load apptainer
 
+# Run the Nextflow command and pipe output to tee for both display and logging
 nextflow run main.nf \
     -profile apptainer,narval \
     --sampleset brugada \
@@ -19,8 +26,8 @@ nextflow run main.nf \
     --liftover \
     --hg19_chain /home/ihcasti/codebase/cag/pgsc_calc_2_01/assets/qc/hg19ToHg38.over.chain.gz \
     --hg38_chain /home/ihcasti/codebase/cag/pgsc_calc_2_01/assets/qc/hg38ToHg19.over.chain.gz \
-    -with-trace traceMHI.txt \
-    -resume
+    -resume \
+    -with-trace traceMHI_$(date +%Y%m%d_%H%M%S).txt 2>&1 | tee "${LOG_FILE}"
     # -c nf_allianceCA.config \
     # --scorefile /home/ihcasti/codebase/cag/pgsc_calc_2_01/assets/qc/scores/brugada_mtag.txt \
     # --skip_ancestry \
@@ -36,7 +43,7 @@ nextflow run main.nf \
 #     -profile singularity \
 #     --sampleset brugada \
 #     --input /home/ihcasti/codebase/cag/pgsc_calc_2_01/assets/qc/samplesheet_test.csv \
-#     -entry RUN_QC_ONLY 
+#     -entry RUN_QC_ONLY 2>&1 | tee "logs/qc_only_$(date +%Y%m%d_%H%M%S).log"
     # --scorefile /home/ihcasti/codebase/cag/pgsc_calc_2_01/assets/qc/scores/brugada_mtag.txt \
     # --target_build GRCh38 \
     # --genotypes_cache cache \

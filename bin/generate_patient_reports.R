@@ -53,24 +53,33 @@ message(paste("Patient summaries saved to:", normalizePath(output_file)))
 
 # FIXME: Probably not needed to have a different directory if not generating many reports
 # Store original working directory
-original_wd <- getwd()
+# original_wd <- getwd()
 
 # Change to output directory
-setwd(output_dir)
+# setwd(output_dir)
 
 # Render report for each patient
 for (pid in all_patient_ids) {
   message(sprintf("Generating reports for patient %s...", pid))
   
-  # Generate PDF report
-  message("  Generating PDF report...")
+  # Generate HTML report with embedded resources
+  message("  Generating HTML report...")
   quarto_render(
-    input = file.path(original_wd, template_file),
-    output_format = "pdf",
-    output_file = paste0("patient_", pid, "_report.pdf"),
+    input = file.path(".", template_file),
+    output_format = "html",
+    output_file = paste0("patient_", pid, "_report.html"),
     execute_params = list(patient_id = pid)
   )
+  
+  # PDF generation commented out to avoid LaTeX dependencies
+  # message("  Generating PDF report...")
+  # quarto_render(
+  #   input = file.path(original_wd, template_file),
+  #   output_format = "pdf",
+  #   output_file = paste0("patient_", pid, "_report.pdf"),
+  #   execute_params = list(patient_id = pid)
+  # )
 }
 
 # Change back to original working directory
-setwd(original_wd)
+# setwd(original_wd)

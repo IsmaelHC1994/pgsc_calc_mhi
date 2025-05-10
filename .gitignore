@@ -14,3 +14,9 @@ assets/report/report.Rproj
 tests/.venv/
 docs/.venv/
 docs/_build
+
+
+###
+cache
+trace*
+logs/
