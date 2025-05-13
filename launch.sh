@@ -28,6 +28,7 @@ nextflow run main.nf \
     --hg38_chain /home/ihcasti/codebase/cag/pgsc_calc_2_01/assets/qc/hg38ToHg19.over.chain.gz \
     -resume \
     -with-trace traceMHI_$(date +%Y%m%d_%H%M%S).txt 2>&1 | tee "${LOG_FILE}"
+    # --pgs_id PGS000016,PGS000768 \ # FIXME NETWORK IS UNREACHABLE. will have to download the files and place then manually. to document.
     # -c nf_allianceCA.config \
     # --scorefile /home/ihcasti/codebase/cag/pgsc_calc_2_01/assets/qc/scores/brugada_mtag.txt \
     # --skip_ancestry \
