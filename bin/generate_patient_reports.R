@@ -3,18 +3,11 @@
 library(tidyverse)
 library(quarto)
 
-# Set up paths
-template_file <- file.path(".", "patient_report_template.qmd")
-output_dir <- "patient_reports"  # Changed to use relative path in current directory
+template_file <- "patient_report_template.qmd"
 
-# Create output directory if it doesn't exist
-if (!dir.exists(output_dir)) {
-  dir.create(output_dir)
-}
-
-# Load the data to get patient IDs
-scores <- read_tsv(list.files(pattern = "pgs.txt", full.names = TRUE)[1])
-popsim <- read_tsv(list.files(pattern = "popsimilarity.txt", full.names = TRUE)[1])
+# Load the data to get patient IDs - handle gzipped files directly
+scores <- read_tsv(gzfile(list.files(pattern = "pgs.txt.gz", full.names = TRUE)[1]))
+popsim <- read_tsv(gzfile(list.files(pattern = "popsimilarity.txt.gz", full.names = TRUE)[1]))
 
 # Create run_patient_data
 scores_popsim <- scores %>%
@@ -35,7 +28,7 @@ run_patient_data <- scores_popsim %>%
 all_patient_ids <- unique(run_patient_data$simple_id)
 
 # Save all patient summaries to file
-output_file <- file.path(output_dir, "patient_summaries.csv")
+output_file <- file.path(".", "patient_summaries.csv")
 text_data <- run_patient_data %>%
   # Format the summary line
   mutate(
@@ -51,12 +44,13 @@ text_data <- run_patient_data %>%
 writeLines(text_data$Summary, output_file)
 message(paste("Patient summaries saved to:", normalizePath(output_file)))
 
-# FIXME: Probably not needed to have a different directory if not generating many reports
-# Store original working directory
-# original_wd <- getwd()
-
-# Change to output directory
-# setwd(output_dir)
+# print template file
+# check if file exists
+if (file.exists(file.path(".", template_file))) {
+  print(paste("Template file exists:", file.path(".", template_file)))
+} else {
+  print(paste("Template file does not exist:", file.path(".", template_file)))
+}
 
 # Render report for each patient
 for (pid in all_patient_ids) {
@@ -70,16 +64,4 @@ for (pid in all_patient_ids) {
     output_file = paste0("patient_", pid, "_report.html"),
     execute_params = list(patient_id = pid)
   )
-  
-  # PDF generation commented out to avoid LaTeX dependencies
-  # message("  Generating PDF report...")
-  # quarto_render(
-  #   input = file.path(original_wd, template_file),
-  #   output_format = "pdf",
-  #   output_file = paste0("patient_", pid, "_report.pdf"),
-  #   execute_params = list(patient_id = pid)
-  # )
 }
-
-# Change back to original working directory
-# setwd(original_wd)

@@ -35,15 +35,14 @@ library(showtext)   # For custom fonts
 library(knitr)      # For table formatting
 
 # Set up FontAwesome
-# Check if fonts directory exists directly or in assets/fonts
-if (dir.exists("fonts")) {
-  font_add('FontAwesome', 'fonts/fontawesome-webfont.ttf')
-} else if (dir.exists("assets/fonts")) {
-  font_add('FontAwesome', 'assets/fonts/fontawesome-webfont.ttf')
+# Check if fonts exists in the same directory as the template
+if (file.exists("./fontawesome-webfont.ttf")) {
+  font_add('FontAwesome', './fontawesome-webfont.ttf')
 } else {
   warning("Font directory not found. FontAwesome not available.")
 }
 showtext_auto()
+
 
 # Helper function to create nicer labels
 nice_label <- function(x) {

@@ -47,7 +47,6 @@ include { PGSCCALC } from './workflows/pgsc_calc'
 
 // Process to generate reports using PGSC_CALC outputs
 process GENERATE_REPORTS {
-    container "ismaelhc94/pgsc-mhi-report:latest"
     publishDir "${params.outdir}/${params.sampleset}/reports", mode: 'copy'
     
     input:
@@ -58,57 +57,20 @@ process GENERATE_REPORTS {
     
     script:
     """
-    # Create cache directories in the working directory
-    mkdir -p .deno_cache
-    mkdir -p .quarto_cache
-    mkdir -p .xdg_cache
+    # Set up cache directories for Quarto/Deno
+    mkdir -p .deno_cache .quarto_cache .xdg_cache
+    export DENO_DIR=\$PWD/.deno_cache
+    export QUARTO_CACHE_DIR=\$PWD/.quarto_cache
+    export XDG_CACHE_HOME=\$PWD/.xdg_cache
     
-    # Set environment variables for cache directories
-    export DENO_DIR=\${PWD}/.deno_cache
-    export QUARTO_CACHE_DIR=\${PWD}/.quarto_cache
-    export XDG_CACHE_HOME=\${PWD}/.xdg_cache
+    # copy the font file to the work directory
+    cp ${projectDir}/assets/fonts/fontawesome-webfont.ttf .
     
-    # Create directory for patient reports
-    mkdir -p patient_reports
+    # Copy the template from bin to work directory
+    cp ${projectDir}/bin/patient_report_template.qmd .
     
-    # List files to debug
-    echo "Files in working directory:"
-    ls -la
-    
-    # Uncompress gzipped files if needed
-    for file in *.gz; do
-        if [[ -f "\$file" ]]; then
-            gunzip -c "\$file" > \$(basename "\$file" .gz)
-            echo "Uncompressed \$file to \$(basename "\$file" .gz)"
-        fi
-    done
-    
-    # Copy the Quarto template file from bin to current directory
-    if [ -f "${projectDir}/bin/patient_report_template.qmd" ]; then
-        cp "${projectDir}/bin/patient_report_template.qmd" ./
-        echo "Copied template file from bin folder"
-    else
-        echo "WARNING: Could not find template file at ${projectDir}/bin/patient_report_template.qmd"
-    fi
-    
-    # Create fonts directory and copy FontAwesome font
-    mkdir -p fonts
-    if [ -f "${projectDir}/bin/fonts/fontawesome-webfont.ttf" ]; then
-        cp "${projectDir}/bin/fonts/fontawesome-webfont.ttf" fonts/
-        echo "Copied FontAwesome font from bin/fonts folder"
-    elif [ -f "${projectDir}/assets/fonts/fontawesome-webfont.ttf" ]; then
-        cp "${projectDir}/assets/fonts/fontawesome-webfont.ttf" fonts/
-        echo "Copied FontAwesome font from assets/fonts folder"
-    else
-        echo "WARNING: FontAwesome font not found. Some report visualizations may not render correctly."
-    fi
-    
-    # Check that the R script is available and run it
-    if [ -f "${projectDir}/bin/generate_patient_reports.R" ]; then
-        echo "Found R script: ${projectDir}/bin/generate_patient_reports.R"
-        # Execute the R script from the current directory
-        Rscript ${projectDir}/bin/generate_patient_reports.R
-    fi
+    # Run the R script
+    generate_patient_reports.R
     """
 }
 
