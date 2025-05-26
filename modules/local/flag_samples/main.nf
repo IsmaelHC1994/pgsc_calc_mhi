@@ -3,7 +3,7 @@ process FLAG_SAMPLES_AWK {
     label 'process_single'
     label 'plink2'
 
-    publishDir path: "${params.outdir}/${params.sampleset}/qc", mode: 'copy'
+    publishDir path: "${params.outdir}/${params.sampleset}/qc", mode: 'symlink'
 
     conda "${moduleDir}/environment.yml"
     container "${ workflow.containerEngine == 'singularity' ? 

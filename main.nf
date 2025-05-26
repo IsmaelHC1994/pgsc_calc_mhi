@@ -47,7 +47,7 @@ include { PGSCCALC } from './workflows/pgsc_calc'
 
 // Process to generate reports using PGSC_CALC outputs
 process GENERATE_REPORTS {
-    publishDir "${params.outdir}/${params.sampleset}/reports", mode: 'copy'
+    publishDir "${params.outdir}/${params.sampleset}/reports", mode: 'symlink'
     
     input:
     path(result_files)
@@ -82,6 +82,7 @@ process GENERATE_REPORTS {
 
 // Standalone QC workflow that generates a samplesheet for PGSC_CALC
 workflow QC {
+    main:
     log.info """
     ===========================================
     PGSC_CALC: QC Preprocessing
@@ -107,13 +108,22 @@ workflow QC {
     
     // Create VCF files channel
     vcf_files = ch_input.map { meta, path_prefix -> 
-        def vcf = file(path_prefix)
+        // Handle ICA project URIs using path() function which handles URIs better
+        def vcf
+        def tbi
         
-        // Check if index file exists and use empty file if it doesn't
-        def tbi_file = "${path_prefix}.tbi"
-        def tbi = file(tbi_file).exists() ? file(tbi_file) : file('NO_FILE')
+        if (path_prefix.toString().startsWith('project://')) {
+            // For ICA project URIs, use file() without checkIfExists - ICA will resolve at runtime
+            vcf = file(path_prefix, checkIfExists: false)
+            tbi = file("${path_prefix}.tbi", checkIfExists: false)
+        } else {
+            // For local files, create file objects as usual
+            vcf = file(path_prefix)
+            def tbi_file = "${path_prefix}.tbi"
+            tbi = file(tbi_file).exists() ? file(tbi_file) : file('NO_FILE')
+        }
         
-        log.info "Processing VCF: ${vcf} (index file: ${tbi_file} exists: ${file(tbi_file).exists()})"
+        log.info "Processing VCF: ${vcf} (index file: ${tbi})"
         
         return tuple(meta, vcf, tbi)
     }

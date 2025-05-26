@@ -166,7 +166,7 @@ workflow PGSCCALC {
         // let's make one, and reuse it where possible
         // see https://nextflow-io.github.io/patterns/optional-input/ which explains this odd implementation pattern
         // these dummy files need to exist for cloud executors to work OK
-        optional_input = file(projectDir / "assets" / "NO_FILE", checkIfExists: true)
+        optional_input = file(projectDir / "assets" / "NO_FILE", checkIfExists: false)
 
         //
         // SUBWORKFLOW: Create reference database for ancestry inference
@@ -189,7 +189,12 @@ workflow PGSCCALC {
         //
         ch_scores = Channel.empty()
         if (params.scorefile) {
-            ch_scores = ch_scores.mix(Channel.fromPath(params.scorefile, checkIfExists: true))
+            // Handle ICA project URIs using path() function
+            if (params.scorefile.toString().startsWith('project://')) {
+                ch_scores = ch_scores.mix(Channel.of(path(params.scorefile)))
+            } else {
+                ch_scores = ch_scores.mix(Channel.fromPath(params.scorefile, checkIfExists: true))
+            }
         }
 
         // make sure accessions look sensible before querying PGS Catalog
@@ -267,9 +272,9 @@ workflow PGSCCALC {
         // - reference allelic frequencies 
         // - intersect counts
         // optional inputs need different names to prevent collisions during stage in
-        optional_intersect_count = file(projectDir / "assets" / "NO_FILE_INTERSECT_COUNT", checkIfExists: true)
+        optional_intersect_count = file(projectDir / "assets" / "NO_FILE_INTERSECT_COUNT", checkIfExists: false)
         ref_afreq = Channel.value([[:], optional_input])
-        intersect_count = Channel.fromPath(optional_intersect_count, checkIfExists: true)
+        intersect_count = Channel.fromPath(optional_intersect_count, checkIfExists: false)
 
         if (run_ancestry_assign) {
             intersection = Channel.empty()
@@ -401,8 +406,8 @@ workflow PGSCCALC {
         emit:
         versions = ch_versions
         // Add these new emit statements to expose score files and ancestry information
-        score_files = run_ancestry_assign ? REPORT.out.score_files : APPLY_SCORE.out.scores
-        ancestry_results = run_ancestry_assign ? REPORT.out.ancestry_results : Channel.empty()
+        score_files = (run_report && run_apply_score) ? REPORT.out.score_files : (run_apply_score ? APPLY_SCORE.out.scores : Channel.empty())
+        ancestry_results = (run_ancestry_assign && run_report && run_apply_score) ? REPORT.out.ancestry_results : Channel.empty()
 }
 
 /*
