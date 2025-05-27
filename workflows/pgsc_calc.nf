@@ -191,8 +191,9 @@ workflow PGSCCALC {
         ch_scores = Channel.empty()
         
         // mhi-qc: Add collected scorefiles if provided
-        if (scorefiles != null && scorefiles.toString() != "NO_FILE") {
-            ch_scores = ch_scores.mix(scorefiles)
+        if (scorefiles != null) {
+            // Only mix scorefiles that are not the dummy file
+            ch_scores = ch_scores.mix(scorefiles.filter { it.name != "NO_FILE" })
         }
         
         if (params.scorefile) {
@@ -225,7 +226,11 @@ workflow PGSCCALC {
             ch_scores = ch_scores.mix(DOWNLOAD_SCOREFILES.out.scorefiles)
         }
 
-        if (!params.scorefile && accessions.every { it.value == "" } && (scorefiles == null || scorefiles.toString() == "NO_FILE")) {
+        // mhi-qc:
+        // Check if we have any source of scoring files
+        // Note: We can't easily check scorefiles channel content here, so we'll be permissive
+        // and let the downstream processes handle empty scorefiles gracefully
+        if (!params.scorefile && accessions.every { it.value == "" } && !params.scorefile_folder) {
             Nextflow.error("No valid accessions or scoring files provided. Please double check --pgs_id, --pgp_id, --trait_efo, --scorefile, or --scorefile_folder parameters")
         }
 
