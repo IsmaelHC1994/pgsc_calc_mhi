@@ -10,7 +10,7 @@
       "type": "object",
       "fa_icon": "fas fa-terminal",
       "description": "Define where the pipeline should find input data and save output data.",
-      "required": ["input", "outdir"],
+      "required": ["outdir"],
       "properties": {
         "input": {
           "type": "string",
@@ -20,6 +20,34 @@
           "description": "Path to comma-separated file containing information about the samples in the experiment.",
           "help_text": "You will need to create a design file with information about the samples in your experiment before running the pipeline. Use this parameter to specify its location. It has to be a comma-separated file with 3 columns, and a header row.",
           "fa_icon": "fas fa-file-csv"
+        },
+        "sampleset": {
+          "type": "string",
+          "description": "Name identifier for this sample set (e.g., 'brugada', 'cohort1')",
+          "fa_icon": "fas fa-tag"
+        },
+        "vcf_files": {
+          "type": "string",
+          "description": "VCF files that will be used as input for analysis",
+          "fa_icon": "fas fa-file"
+        },
+        "scorefile_folder": {
+          "type": "string",
+          "format": "directory-path",
+          "description": "Folder containing one or more scoring files in PGS Catalog format",
+          "fa_icon": "fas fa-folder"
+        },
+        "report_template": {
+          "type": "string",
+          "format": "file-path",
+          "description": "Quarto template file (.qmd) for generating patient reports",
+          "fa_icon": "fas fa-file-code"
+        },
+        "fontawesome_font": {
+          "type": "string",
+          "format": "file-path",
+          "description": "Optional FontAwesome font file (.ttf) for displaying person icons in reports. If not provided, circles will be used instead.",
+          "fa_icon": "fas fa-font"
         },
         "outdir": {
           "type": "string",

@@ -147,6 +147,7 @@ include { DUMPSOFTWAREVERSIONS } from '../modules/local/dumpsoftwareversions'
 workflow PGSCCALC {
     take:
         samplesheet // mhi-qc: Optional samplesheet from MHI-QC workflow
+        scorefiles  // mhi-qc: Optional scorefiles from COLLECT_SCOREFILES process
         
     main:
         ch_versions = Channel.empty()
@@ -188,6 +189,12 @@ workflow PGSCCALC {
         // SUBWORKFLOW: Get scoring file from PGS Catalog accession
         //
         ch_scores = Channel.empty()
+        
+        // mhi-qc: Add collected scorefiles if provided
+        if (scorefiles != null && scorefiles.toString() != "NO_FILE") {
+            ch_scores = ch_scores.mix(scorefiles)
+        }
+        
         if (params.scorefile) {
             // Handle ICA project URIs using path() function
             if (params.scorefile.toString().startsWith('project://')) {
@@ -218,8 +225,8 @@ workflow PGSCCALC {
             ch_scores = ch_scores.mix(DOWNLOAD_SCOREFILES.out.scorefiles)
         }
 
-        if (!params.scorefile && accessions.every { it.value == "" }) {
-            Nextflow.error("No valid accessions or scoring files provided. Please double check --pgs_id, --pgp_id, --trait_efo, or --scorefile parameters")
+        if (!params.scorefile && accessions.every { it.value == "" } && (scorefiles == null || scorefiles.toString() == "NO_FILE")) {
+            Nextflow.error("No valid accessions or scoring files provided. Please double check --pgs_id, --pgp_id, --trait_efo, --scorefile, or --scorefile_folder parameters")
         }
 
         //

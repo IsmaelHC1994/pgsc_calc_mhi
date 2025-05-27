@@ -9,12 +9,34 @@
       }
   ,
       {
-        "id": "input",
-        "label": "input",
-        "helpText": "Path to comma-separated file containing information about the samples in the experiment.",
+        "id": "sampleset",
+        "label": "Sample Set Name",
+        "helpText": "Name identifier for this sample set (e.g., 'brugada', 'cohort1')",
+        "type": "textbox",
+        "value": ""
+        
+      }
+      ,
+      {
+        "id": "vcf_files",
+        "label": "VCF files",
+        "helpText": "VCF files that will be used as input for analysis",
         "type": "data",
         "dataFilter": {
           "dataType": "file"
+        },
+        "maxValues": 10,
+        "minValues": 1
+        
+      }
+      ,
+      {
+        "id": "scorefile_folder",
+        "label": "Scorefile Folder",
+        "helpText": "Folder containing one or more scoring files in PGS Catalog format",
+        "type": "data",
+        "dataFilter": {
+          "dataType": "directory"
         },
         "maxValues": 1,
         "minValues": 0
@@ -22,15 +44,28 @@
       }
       ,
       {
-        "id": "vcfs-input",
-        "label": "VCF files",
-        "helpText": "VCFs or msVCFs that will be used for inputs - will be constructed into the samplesheet",
+        "id": "report_template",
+        "label": "Patient Report Template",
+        "helpText": "Quarto template file (.qmd) for generating patient reports",
         "type": "data",
         "dataFilter": {
           "dataType": "file"
         },
-        "maxValues": 10,
+        "maxValues": 1,
         "minValues": 1
+        
+      }
+      ,
+      {
+        "id": "fontawesome_font",
+        "label": "FontAwesome Font File",
+        "helpText": "Optional FontAwesome font file (.ttf) for displaying person icons in reports. If not provided, circles will be used instead.",
+        "type": "data",
+        "dataFilter": {
+          "dataType": "file"
+        },
+        "maxValues": 1,
+        "minValues": 0
         
       }
       ,
@@ -687,14 +722,6 @@
         "label": "MHI-QC Options",
         "helpText": "Parameters used for MHI-QC workflow",
         "type": "section"
-      }
-      ,
-      {
-        "id": "sampleset",
-        "label": "Sample Set",
-        "helpText": "Sample set identifier for MHI-QC workflow",
-        "type": "textbox",
-        "value": ""
       }
       ,
       {

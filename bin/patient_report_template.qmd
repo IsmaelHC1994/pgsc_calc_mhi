@@ -36,13 +36,16 @@ library(knitr)      # For table formatting
 
 # Set up FontAwesome
 # Check if fonts exists in the same directory as the template
+use_fontawesome <- FALSE
 if (file.exists("./fontawesome-webfont.ttf")) {
   font_add('FontAwesome', './fontawesome-webfont.ttf')
+  showtext_auto()
+  use_fontawesome <- TRUE
+  message("FontAwesome font loaded successfully")
 } else {
-  warning("Font directory not found. FontAwesome not available.")
+  warning("FontAwesome font not found. Using circle fallback.")
+  showtext_auto()
 }
-showtext_auto()
-
 
 # Helper function to create nicer labels
 nice_label <- function(x) {
@@ -213,8 +216,8 @@ create_patient_risk_viz <- function(patient_id, pgs_id = NULL) {
       color = "black"
     ) +
     geom_text(
-      label = "\uf007",
-      family = "FontAwesome",
+      label = if(use_fontawesome) "\uf007" else "●",     # FontAwesome person icon or circle fallback
+      family = if(use_fontawesome) "FontAwesome" else "sans",
       size = 16,
       vjust = 0.5,
       hjust = 0.5,
