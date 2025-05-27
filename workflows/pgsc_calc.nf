@@ -128,6 +128,8 @@ if (params.parallel) {
 */
 
 include { DOWNLOAD_SCOREFILES  } from '../modules/local/download_scorefiles'
+// mhi-qc:
+include { COMBINE_SCOREFILES   } from '../modules/local/combine_scorefiles'
 
 include { BOOTSTRAP_ANCESTRY   } from '../subworkflows/local/ancestry/bootstrap_ancestry'
 include { INPUT_CHECK          } from '../subworkflows/local/input_check'
@@ -258,8 +260,25 @@ workflow PGSCCALC {
             // Create empty VCF channel since we're using plink format
             ch_vcf_direct = Channel.empty()
             
-            // Prepare scorefiles for downstream processes
+            // Prepare scorefiles for downstream processes - need to run COMBINE_SCOREFILES
             ch_scorefiles = ch_scores.collect()
+            
+            // Set up chain files for COMBINE_SCOREFILES
+            Channel.fromPath(optional_input).set { chain_files }
+            if (params.hg19_chain && params.hg38_chain) {
+                Channel.fromPath(params.hg19_chain, checkIfExists: true)
+                    .mix(Channel.fromPath(params.hg38_chain, checkIfExists: true))
+                    .collect()
+                    .set { chain_files }
+            }
+            
+            // Run COMBINE_SCOREFILES to process scorefiles and generate log_scorefiles
+            COMBINE_SCOREFILES(ch_scorefiles, chain_files)
+            ch_versions = ch_versions.mix(COMBINE_SCOREFILES.out.versions)
+            
+            // Use COMBINE_SCOREFILES outputs
+            ch_processed_scorefiles = COMBINE_SCOREFILES.out.scorefiles
+            ch_log_scorefiles = COMBINE_SCOREFILES.out.log_scorefiles
             
         } else if (run_input_check) {
             // Original INPUT_CHECK approach
@@ -288,6 +307,9 @@ workflow PGSCCALC {
             ch_pheno_direct = INPUT_CHECK.out.pheno
             ch_variants_direct = INPUT_CHECK.out.variants
             ch_vcf_direct = INPUT_CHECK.out.vcf
+            // mhi-qc:
+            ch_processed_scorefiles = INPUT_CHECK.out.scorefiles
+            ch_log_scorefiles = INPUT_CHECK.out.log_scorefiles
         }
 
         //
@@ -371,7 +393,7 @@ workflow PGSCCALC {
                 MAKE_COMPATIBLE.out.geno,
                 MAKE_COMPATIBLE.out.pheno,
                 MAKE_COMPATIBLE.out.variants,
-                ch_scorefiles,  // mhi-qc: Use prepared scorefiles instead of INPUT_CHECK.out.scorefiles
+                ch_processed_scorefiles,  // mhi-qc: Use processed scorefiles instead of INPUT_CHECK.out.scorefiles
                 intersection
             )
             ch_versions = ch_versions.mix(MATCH.out.versions)
@@ -428,7 +450,8 @@ workflow PGSCCALC {
                 relatedness,
                 APPLY_SCORE.out.scores,
                 projections,
-                INPUT_CHECK.out.log_scorefiles,
+                // mhi-qc:
+                ch_log_scorefiles,
                 MATCH.out.db,
                 run_ancestry_assign,
                 intersect_count
