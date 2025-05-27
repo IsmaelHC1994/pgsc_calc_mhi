@@ -55,27 +55,7 @@ process COLLECT_SCOREFILES {
     script:
     """
     mkdir -p scorefiles
-    if [ -d "${scorefile_folder}" ]; then
-        find "${scorefile_folder}" -name "*.txt" -exec cp {} scorefiles/ \\;
-    fi
-    """
-}
-
-// Process to create samplesheet from VCF inputs for PGSC_CALC compatibility
-process CREATE_SAMPLESHEET_FROM_VCF {
-    publishDir "${params.outdir}/${params.sampleset}/qc", mode: 'symlink'
-    
-    input:
-    tuple val(meta), path(pgen), path(psam), path(pvar)
-    
-    output:
-    path("${params.sampleset}_pgscalc_samplesheet.csv"), emit: samplesheet
-    
-    script:
-    def prefix = pgen.getBaseName()
-    """
-    echo "sampleset,path_prefix" > ${params.sampleset}_pgscalc_samplesheet.csv
-    echo "${params.sampleset},\$PWD/${prefix}" >> ${params.sampleset}_pgscalc_samplesheet.csv
+    cp ${scorefile_folder}/*.txt scorefiles/
     """
 }
 
@@ -255,19 +235,8 @@ workflow QC {
         }
     )
     
-    // Create samplesheet from processed VCF data for PGSC_CALC compatibility
-    CREATE_SAMPLESHEET_FROM_VCF(FLAG_SAMPLES_AWK.out.pgen
-        .join(FLAG_SAMPLES_AWK.out.psam)
-        .join(FLAG_SAMPLES_AWK.out.pvar))
-    
-    // Debug output for samplesheet
-    CREATE_SAMPLESHEET_FROM_VCF.out.samplesheet.view { sheet ->
-        "Generated samplesheet: ${sheet}"
-    }
-    
-    // Emit outputs
+    // Emit outputs - no longer need samplesheet
     emit:
-    samplesheet = CREATE_SAMPLESHEET_FROM_VCF.out.samplesheet
     pgen = FLAG_SAMPLES_AWK.out.pgen
     psam = FLAG_SAMPLES_AWK.out.psam
     pvar = FLAG_SAMPLES_AWK.out.pvar
@@ -305,8 +274,17 @@ workflow {
     // Step 1: Run the QC workflow to generate samplesheet
     QC()
         
-    // Step 2: Run PGSC_CALC with the samplesheet from QC and collected scorefiles
-    PGSCCALC(QC.out.samplesheet, ch_collected_scorefiles)
+    // Step 2: Run PGSC_CALC with direct genotype data from QC (bypassing samplesheet)
+    // Combine the QC outputs into a single channel for PGSC_CALC
+    ch_qc_geno_data = QC.out.pgen
+        .join(QC.out.psam)
+        .join(QC.out.pvar)
+        .map { meta, pgen, psam, pvar -> 
+            [meta, pgen, psam, pvar]
+        }
+    
+    // Pass null for samplesheet since we're using direct genotype data
+    PGSCCALC(Channel.value(null), ch_collected_scorefiles, ch_qc_geno_data)
     
     // Step 3: Generate reports using both score files and ancestry results from PGSC_CALC
     // Extract just the file paths from the metadata tuples

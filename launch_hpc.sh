@@ -16,10 +16,10 @@ module load apptainer
 nextflow run main.nf \
     -profile apptainer,narval \
     --sampleset brugada \
-    --vcf_files "/home/ihcasti/codebase/cag/pgsc_calc_2_01/assets/qc/test_data/*.vcf.gz" \
+    --vcf_files "/home/ihcasti/codebase/cag/pgsc_calc_2_01/assets/qc/brugada.vcf.gz" \
     --scorefile_folder "/home/ihcasti/codebase/cag/pgsc_calc_2_01/assets/qc/scores" \
-    --report_template "/home/ihcasti/codebase/cag/dev/patient_report_template.qmd" \
-    --fontawesome_font "/home/ihcasti/codebase/cag/dev/fontawesome-webfont.ttf" \
+    --report_template "/home/ihcasti/codebase/cag/bin/patient_report_template.qmd" \
+    --fontawesome_font "/home/ihcasti/codebase/cag/assets/fonts/fontawesome-webfont.ttf" \
     --target_build GRCh38 \
     --genotypes_cache cache \
     --run_ancestry /home/ihcasti/codebase/cag/pgsc_calc_2_01/assets/qc/pgsc_HGDP+1kGP_v1.tar.zst \

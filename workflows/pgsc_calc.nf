@@ -148,19 +148,27 @@ workflow PGSCCALC {
     take:
         samplesheet // mhi-qc: Optional samplesheet from MHI-QC workflow
         scorefiles  // mhi-qc: Optional scorefiles from COLLECT_SCOREFILES process
+        geno_data   // mhi-qc: Optional direct genotype data (pgen, psam, pvar) from QC workflow
         
     main:
         ch_versions = Channel.empty()
         
-        // mhi-qc: determine whether to use the QC samplesheet or params.input:
-        ch_input = samplesheet == null || (samplesheet instanceof Object && samplesheet.toString() == "null") ? 
-            Channel.value(params.input) : 
-            samplesheet
+        // mhi-qc: determine whether to use direct genotype data or samplesheet approach
+        use_direct_geno = geno_data != null && geno_data.toString() != "NO_FILE"
         
-        // mhi-qc: Log input being used
-        ch_input.first().view { input ->
-            log.info "Using input for PGSC_CALC: ${input}"
-            return input
+        if (use_direct_geno) {
+            log.info "Using direct genotype data from QC workflow (bypassing samplesheet)"
+        } else {
+            // mhi-qc: determine whether to use the QC samplesheet or params.input:
+            ch_input = samplesheet == null || (samplesheet instanceof Object && samplesheet.toString() == "null") ? 
+                Channel.value(params.input) : 
+                samplesheet
+            
+            // mhi-qc: Log input being used
+            ch_input.first().view { input ->
+                log.info "Using input for PGSC_CALC: ${input}"
+                return input
+            }
         }
         
         // some workflows require an optional input
@@ -235,10 +243,26 @@ workflow PGSCCALC {
         }
 
         //
-        // SUBWORKFLOW: Validate and stage input files
+        // SUBWORKFLOW: Validate and stage input files OR use direct genotype data
         //
-
-        if (run_input_check) {
+        
+        if (use_direct_geno) {
+            // mhi-qc: Use direct genotype data from QC workflow
+            log.info "Using direct genotype data, skipping INPUT_CHECK"
+            
+            // Extract genotype data components
+            ch_geno_direct = geno_data.map { meta, pgen, psam, pvar -> [meta, pgen] }
+            ch_pheno_direct = geno_data.map { meta, pgen, psam, pvar -> [meta, psam] }
+            ch_variants_direct = geno_data.map { meta, pgen, psam, pvar -> [meta, pvar] }
+            
+            // Create empty VCF channel since we're using plink format
+            ch_vcf_direct = Channel.empty()
+            
+            // Prepare scorefiles for downstream processes
+            ch_scorefiles = ch_scores.collect()
+            
+        } else if (run_input_check) {
+            // Original INPUT_CHECK approach
             // flatten the score channel
             ch_scorefiles = ch_scores.collect()
             // chain files are optional input
@@ -258,6 +282,12 @@ workflow PGSCCALC {
                 chain_files
             )
             ch_versions = ch_versions.mix(INPUT_CHECK.out.versions)
+            
+            // Use INPUT_CHECK outputs
+            ch_geno_direct = INPUT_CHECK.out.geno
+            ch_pheno_direct = INPUT_CHECK.out.pheno
+            ch_variants_direct = INPUT_CHECK.out.variants
+            ch_vcf_direct = INPUT_CHECK.out.vcf
         }
 
         //
@@ -266,10 +296,10 @@ workflow PGSCCALC {
 
         if (run_make_compatible) {
             MAKE_COMPATIBLE (
-                INPUT_CHECK.out.geno,
-                INPUT_CHECK.out.pheno,
-                INPUT_CHECK.out.variants,
-                INPUT_CHECK.out.vcf,
+                ch_geno_direct,
+                ch_pheno_direct,
+                ch_variants_direct,
+                ch_vcf_direct,
 
             )
             ch_versions = ch_versions.mix(MAKE_COMPATIBLE.out.versions)
@@ -341,7 +371,7 @@ workflow PGSCCALC {
                 MAKE_COMPATIBLE.out.geno,
                 MAKE_COMPATIBLE.out.pheno,
                 MAKE_COMPATIBLE.out.variants,
-                INPUT_CHECK.out.scorefiles,
+                ch_scorefiles,  // mhi-qc: Use prepared scorefiles instead of INPUT_CHECK.out.scorefiles
                 intersection
             )
             ch_versions = ch_versions.mix(MATCH.out.versions)
