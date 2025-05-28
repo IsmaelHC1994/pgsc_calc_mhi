@@ -253,9 +253,32 @@ workflow PGSCCALC {
             log.info "Using direct genotype data, skipping INPUT_CHECK"
             
             // Extract genotype data components
-            ch_geno_direct = geno_data.map { meta, pgen, psam, pvar -> [meta, pgen] }
-            ch_pheno_direct = geno_data.map { meta, pgen, psam, pvar -> [meta, psam] }
-            ch_variants_direct = geno_data.map { meta, pgen, psam, pvar -> [meta, pvar] }
+            ch_geno_direct = geno_data.map { meta, pgen, psam, pvar -> 
+                def new_meta = meta.clone()
+                new_meta.is_pfile = true
+                new_meta.chrom = "ALL"
+                new_meta.build = params.target_build ?: "GRCh38"
+                [new_meta, pgen] 
+            }
+            ch_pheno_direct = geno_data.map { meta, pgen, psam, pvar -> 
+                def new_meta = meta.clone()
+                new_meta.is_pfile = true
+                new_meta.chrom = "ALL"
+                new_meta.build = params.target_build ?: "GRCh38"
+                [new_meta, psam] 
+            }
+            ch_variants_direct = geno_data.map { meta, pgen, psam, pvar -> 
+                def new_meta = meta.clone()
+                new_meta.is_pfile = true
+                new_meta.chrom = "ALL"
+                new_meta.build = params.target_build ?: "GRCh38"
+                [new_meta, pvar] 
+            }
+            
+            // Debug: Check if channels have data
+            ch_geno_direct.view { "DEBUG ch_geno_direct: ${it}" }
+            ch_pheno_direct.view { "DEBUG ch_pheno_direct: ${it}" }
+            ch_variants_direct.view { "DEBUG ch_variants_direct: ${it}" }
             
             // Create empty VCF channel since we're using plink format
             ch_vcf_direct = Channel.empty()
@@ -317,6 +340,12 @@ workflow PGSCCALC {
         //
 
         if (run_make_compatible) {
+            // Debug: Check what's being passed to MAKE_COMPATIBLE
+            ch_geno_direct.view { "DEBUG MAKE_COMPATIBLE geno input: ${it}" }
+            ch_pheno_direct.view { "DEBUG MAKE_COMPATIBLE pheno input: ${it}" }
+            ch_variants_direct.view { "DEBUG MAKE_COMPATIBLE variants input: ${it}" }
+            ch_vcf_direct.view { "DEBUG MAKE_COMPATIBLE vcf input: ${it}" }
+            
             MAKE_COMPATIBLE (
                 ch_geno_direct,
                 ch_pheno_direct,
