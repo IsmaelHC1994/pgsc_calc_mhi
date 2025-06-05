@@ -44,7 +44,7 @@ include { PGSCCALC } from './workflows/pgsc_calc'
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-// Process to collect scorefiles from a folder
+// Process to collect scorefiles from a tar file
 process COLLECT_SCOREFILES {
     input:
     path(scorefile_folder)
@@ -55,7 +55,7 @@ process COLLECT_SCOREFILES {
     script:
     """
     mkdir -p scorefiles
-    cp ${scorefile_folder}/*.txt scorefiles/
+    tar xf ${scorefile_folder} -C scorefiles/
     """
 }
 
@@ -258,7 +258,8 @@ workflow {
     // Handle scorefile folder input if provided
     ch_collected_scorefiles = Channel.empty()
     if (params.scorefile_folder) {
-        COLLECT_SCOREFILES(params.scorefile_folder)
+        // Use the zip file directly
+        COLLECT_SCOREFILES(file(params.scorefile_folder))
         ch_collected_scorefiles = COLLECT_SCOREFILES.out.scorefiles
     } else {
         // Create a dummy channel for when no scorefiles are collected
