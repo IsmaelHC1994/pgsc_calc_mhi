@@ -7,8 +7,7 @@ process INTERSECT_VARIANTS {
 
     tag "$meta.id chromosome $meta.chrom"
 
-    cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
-    storeDir cachedir / "ancestry" / "intersected"
+    publishDir "${params.outdir}/ancestry/intersected", mode: 'symlink'
 
     conda "${task.ext.conda}"
 

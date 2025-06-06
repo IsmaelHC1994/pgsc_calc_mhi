@@ -46,6 +46,7 @@ include { PGSCCALC } from './workflows/pgsc_calc'
 
 // Process to collect scorefiles from a tar file
 process COLLECT_SCOREFILES {
+    label 'process_low'
     input:
     path(scorefile_folder)
     
@@ -61,6 +62,8 @@ process COLLECT_SCOREFILES {
 
 // Process to generate reports using PGSC_CALC outputs
 process GENERATE_REPORTS {
+    label 'process_low'
+    label 'mhi_report'
     publishDir "${params.outdir}/${params.sampleset}/reports", mode: 'symlink'
     
     input:
@@ -303,7 +306,7 @@ workflow {
     fontawesome_input = params.fontawesome_font ? file(params.fontawesome_font) : file('NO_FILE')
     
     // Generate reports using all results and the provided template
-    GENERATE_REPORTS(all_result_files, params.report_template, fontawesome_input)
+    GENERATE_REPORTS(all_result_files, file(params.report_template), fontawesome_input)
     
 }
 

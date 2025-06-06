@@ -158,19 +158,6 @@
       }
       ,
       {
-        "id": "genotypes_cache",
-        "label": "genotypes_cache",
-        "helpText": "Path to a directory that can store relabelled genotypes (and the reference panel intersections and PCA with --run_ancestry) to speed up new PGS calculations on previously harmonized samples",
-        "type": "data",
-        "dataFilter": {
-          "dataType": "directory"
-        },
-        "maxValues": 1,
-        "minValues": 0
-        
-      }
-      ,
-      {
         "id": "section_compatibilityoptions",
         "label": "Compatibility options",
         "helpText": "Define parameters that control how scoring files and target genomes are made compatible with each other",
