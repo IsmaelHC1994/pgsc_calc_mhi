@@ -31,15 +31,50 @@
       }
       ,
       {
+        "id": "section_scorefiles",
+        "label": "Scoring File Options",
+        "helpText": "Choose ONE of the following methods to provide scoring files: upload a folder, or specify PGS Catalog IDs to download",
+        "type": "section"
+        
+      }
+      ,
+      {
         "id": "scorefile_folder",
-        "label": "Scorefile Folder",
-        "helpText": "Folder containing one or more scoring files in PGS Catalog format",
+        "label": "Scorefile Tar File (Upload)",
+        "helpText": "Tar file containing one or more scoring files in PGS Catalog format. Alternative to using PGS Catalog IDs below.",
         "type": "data",
         "dataFilter": {
-          "dataType": "directory"
+          "dataType": "file"
         },
         "maxValues": 1,
         "minValues": 0
+        
+      }
+      ,
+      {
+        "id": "pgs_id",
+        "label": "PGS Score IDs (Download)",
+        "helpText": "Comma-separated list of PGS score IDs to download from PGS Catalog, e.g. PGS000802,PGS000001. Alternative to uploading scorefile folder above.",
+        "type": "textbox",
+        "value": ""
+        
+      }
+      ,
+      {
+        "id": "pgp_id",
+        "label": "PGS Publication IDs (Download)", 
+        "helpText": "Comma-separated list of PGS Catalog publication IDs to download, e.g. PGP000001,PGP000002. Alternative to uploading scorefile folder above.",
+        "type": "textbox",
+        "value": ""
+        
+      }
+      ,
+      {
+        "id": "efo_id",
+        "label": "EFO Trait IDs (Download)",
+        "helpText": "Comma-separated list of PGS Catalog EFO trait IDs to download, e.g. EFO_0004214,EFO_0000305. Alternative to uploading scorefile folder above.",
+        "type": "textbox",
+        "value": ""
         
       }
       ,
@@ -93,42 +128,6 @@
         "helpText": "What format is the samplesheet in? (csv/json)",
         "type": "textbox",
         "value": "csv"
-        
-      }
-      ,
-      {
-        "id": "scorefile",
-        "label": "scorefile",
-        "helpText": "Path to a scoring file in PGS Catalog format. Multiple scorefiles can be specified using wildcards (e.g., ``--scorefile \\\"path/to/scores/*.txt\\\"``)",
-        "type": "textbox",
-        "value": ""
-        
-      }
-      ,
-      {
-        "id": "pgs_id",
-        "label": "pgs_id",
-        "helpText": "A comma separated list of PGS score IDs, e.g. PGS000802",
-        "type": "textbox",
-        "value": ""
-        
-      }
-      ,
-      {
-        "id": "pgp_id",
-        "label": "pgp_id",
-        "helpText": "A comma separated list of PGS Catalog publications, e.g. PGP000001",
-        "type": "textbox",
-        "value": ""
-        
-      }
-      ,
-      {
-        "id": "efo_id",
-        "label": "efo_id",
-        "helpText": "A comma separated list of PGS Catalog EFO traits, e.g. EFO_0004214",
-        "type": "textbox",
-        "value": ""
         
       }
       ,

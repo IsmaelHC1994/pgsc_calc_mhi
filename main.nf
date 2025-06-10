@@ -254,6 +254,9 @@ workflow {
     VCF Files: ${params.vcf_files}
     Sample Set: ${params.sampleset}
     Scorefile Folder: ${params.scorefile_folder}
+    PGS IDs: ${params.pgs_id ?: 'None'}
+    PGP IDs: ${params.pgp_id ?: 'None'}
+    EFO IDs: ${params.efo_id ?: 'None'}
     Report Template: ${params.report_template}
     ===========================================
     """
@@ -267,6 +270,22 @@ workflow {
     } else {
         // Create a dummy channel for when no scorefiles are collected
         ch_collected_scorefiles = Channel.value(file('NO_FILE'))
+    }
+    
+    // Validate that at least one source of scoring files is provided
+    def has_scorefile_folder = params.scorefile_folder && params.scorefile_folder != ""
+    def has_pgs_id = params.pgs_id && params.pgs_id != ""
+    def has_pgp_id = params.pgp_id && params.pgp_id != ""
+    def has_efo_id = params.efo_id && params.efo_id != ""
+    def has_scorefile = params.scorefile && params.scorefile != ""
+    
+    if (!has_scorefile_folder && !has_pgs_id && !has_pgp_id && !has_efo_id && !has_scorefile) {
+        error "ERROR: No scoring files specified! Please provide either:\n" +
+              "  - scorefile_folder (folder with scoring files)\n" +
+              "  - pgs_id (PGS Catalog score IDs)\n" +
+              "  - pgp_id (PGS Catalog publication IDs)\n" +
+              "  - efo_id (PGS Catalog EFO trait IDs)\n" +
+              "  - scorefile (individual scoring file path)"
     }
     
     // Step 1: Run the QC workflow to generate samplesheet
