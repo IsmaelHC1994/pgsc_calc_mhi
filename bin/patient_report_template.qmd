@@ -102,7 +102,7 @@ scores_popsim <- scores %>%
   # Create a simple ID column using the last part after underscore
   mutate(simple_id = str_extract(IID, "[^_]+$"))
 
-# Calculate percentiles for each PGS score separately
+# Calculate percentiles for each PRS score separately
 scores_popsim <- scores_popsim %>%
   group_by(PGS) %>%
   mutate(Overall_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
@@ -127,7 +127,7 @@ if (is.na(full_patient_id)) {
   stop("Patient ID not found")
 }
 
-# Get all PGS scores for this patient
+# Get all PRS scores for this patient
 patient_pgs_scores <- scores_popsim %>%
   filter(IID == full_patient_id) %>%
   pull(PGS) %>%
@@ -140,13 +140,13 @@ patient_summary_all <- scores_popsim %>%
 
 write_csv(patient_summary_all, "patient_summaries.csv")
 
-# Get list of PGS scores for this patient
+# Get list of PRS scores for this patient
 patient_pgs_list <- scores_popsim %>%
   filter(IID == full_patient_id) %>%
   pull(PGS) %>%
   unique()
 
-# Create bulleted list of PGS scores
+# Create bulleted list of PRS scores
 pgs_bullet_list <- paste0("- **", patient_pgs_list, "**", collapse = "\n")
 ```
 
@@ -169,7 +169,7 @@ scale_plot <- function(p) {
 
 # Function to create patient risk visualization with human icons - SIMPLIFIED to only show overall percentile
 create_patient_risk_viz <- function(patient_id, pgs_id = NULL) {
-  # Get patient data, filtered by PGS if provided
+  # Get patient data, filtered by PRS if provided
   filtered_data <- if (!is.null(pgs_id)) {
     scores_popsim %>% filter(PGS == pgs_id)
   } else {
@@ -275,7 +275,7 @@ create_patient_risk_viz <- function(patient_id, pgs_id = NULL) {
 
 # Function to create density plot for a patient - SIMPLIFIED to only show overall density
 create_density_plot <- function(patient_id, pgs_id = NULL) {
-  # Filter data by PGS if provided
+  # Filter data by PRS if provided
   filtered_data <- if (!is.null(pgs_id)) {
     scores_popsim %>% filter(PGS == pgs_id)
   } else {
@@ -311,7 +311,7 @@ create_density_plot <- function(patient_id, pgs_id = NULL) {
       size = 12
     ) +
     labs(
-      title = "Overall Distribution of PGS Scores",
+      title = "Overall Distribution of PRS Scores",
       x = "Z-Score (Most Similar Population)",
       y = "Density"
     ) +
@@ -324,9 +324,9 @@ create_density_plot <- function(patient_id, pgs_id = NULL) {
     )
 }
 
-# function to create a histogram of the PGS score
+# function to create a histogram of the PRS score
 create_histogram_density_plot <- function(patient_id, pgs_id = NULL) {
-  # Filter data by PGS if provided
+  # Filter data by PRS if provided
   filtered_data <- if (!is.null(pgs_id)) {
     scores_popsim %>% filter(PGS == pgs_id)
   } else {
@@ -357,7 +357,7 @@ create_histogram_density_plot <- function(patient_id, pgs_id = NULL) {
       size = 12
     ) +
     labs(
-      title = "Distribution of PGS Scores",
+      title = "Distribution of PRS Scores",
       subtitle = "Patient highlighted in red",
       x = "Z-Score (Most Similar Population)",
       y = "Frequency"
@@ -372,9 +372,9 @@ create_histogram_density_plot <- function(patient_id, pgs_id = NULL) {
     )
 }
 
-# boxplot of the PGS score with patient placement
+# boxplot of the PRS score with patient placement
 create_boxplot <- function(patient_id, pgs_id = NULL) {
-  # Filter data by PGS if provided
+  # Filter data by PRS if provided
   filtered_data <- if (!is.null(pgs_id)) {
     scores_popsim %>% filter(PGS == pgs_id)
   } else {
@@ -400,10 +400,10 @@ create_boxplot <- function(patient_id, pgs_id = NULL) {
       color = "darkblue"
     ) +
     labs(
-      title = "Distribution des scores PGS",
+      title = "Distribution des scores PRS",
       subtitle = paste("Patient", patient_id, "en rouge"),
       x = NULL,
-      y = "Score PGS (Z_MostSimilarPop)"
+      y = "Score PRS (Z_MostSimilarPop)"
     ) +
     theme_pubr(base_size = 28) +  # Using theme_pubr consistently
     theme(
@@ -427,17 +427,17 @@ Les poids dérivés des scores polygéniques suivants ont été utilisés dans c
 
 `r pgs_bullet_list`
 
-Ces scores peuvent être consultés dans l'entrée correspondante du [Polygenic Score (PGS) Catalog](https://www.pgscatalog.org/): **https://www.pgscatalog.org/**
+Ces scores peuvent être consultés dans l'entrée correspondante du [Polygenic Score Catalog](https://www.pgscatalog.org/): **https://www.pgscatalog.org/**
 
 Ce score a été ajusté avec le Z-score de la population la plus similaire (Z_MostSimilarPop) en utilisant [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) version 2.0.1 [^1].
 :::
 
 
 ::: {.callout-tip}
-## Interprétation des scores PGS
+## Interprétation des scores PRS
 
 Pour chaque score polygénique évalué, le profil génétique du patient est analysé en comparaison avec un groupe de référence génétiquement diversifié. Le percentile de risque final est déterminé en alignant le score individuel avec la population de référence présentant l'ascendance génétique la plus proche.
-Il est donc essentiel de se référer aux spécifications détaillées disponibles dans le catalogue PGS pour chaque score. La pertinence des estimations de risque pour d'autres populations est directement liée à leur ressemblance avec les cohortes initiales ayant servi à l'élaboration du modèle.
+Il est donc essentiel de se référer aux spécifications détaillées disponibles dans le Polygenic Score Catalog pour chaque score. La pertinence des estimations de risque pour d'autres populations est directement liée à leur ressemblance avec les cohortes initiales ayant servi à l'élaboration du modèle.
 :::
 
 
@@ -461,7 +461,7 @@ Les principales restrictions comprennent une héritabilité incomplète et une c
 #| warning: false
 #| message: false
 
-# Display summary of all PGS scores for this patient
+# Display summary of all PRS scores for this patient
 patient_summary_table <- scores_popsim %>%
   filter(IID == full_patient_id) %>%
   select(PGS, Z_MostSimilarPop, Overall_Percentile) %>%
@@ -474,7 +474,7 @@ patient_summary_table <- scores_popsim %>%
 
 # For HTML output, use kable
 knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c", 
-             caption = paste("Résumé de tous les scores PGS pour le patient", params$patient_id))
+             caption = paste("Résumé de tous les scores PRS pour le patient", params$patient_id))
 ```
 
 ```{r generate-sections, results='asis', echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=8, out.width="100%"}
@@ -484,10 +484,10 @@ knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c",
 #| out-width: "100%"
 #| fig-dpi: 300
 
-# Loop through each PGS score and create a section for it
+# Loop through each PRS score and create a section for it
 for (pgs_id in patient_pgs_scores) {
   # Create section header
-  cat("\n\n## Analyse du score PGS:", pgs_id, "\n\n")
+  cat("\n\n## Analyse du score PRS:", pgs_id, "\n\n")
  
   # Risk visualization section
   cat("\n\n### Visualisation du risque pour", pgs_id, "\n\n")
