@@ -1,0 +1,571 @@
+---
+title: "Debug PRS Report"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    self-contained: true
+    fig-width: 12
+    fig-height: 8
+    theme: default
+    code-fold: true
+    code-tools: false
+    fig-dpi: 300
+    fig-format: "png"
+    fig-retina: 2
+execute:
+  cache: false
+  freeze: auto
+params:
+  patient_id: "10003"
+---
+
+```{r setup, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
+#| label: setup
+
+# Core data manipulation and visualization
+library(tidyverse)
+library(patchwork)
+library(ggpubr)
+library(viridis)
+library(showtext)
+library(knitr)
+# if (!requireNamespace("pak", quietly = TRUE)) {
+#   install.packages("pak")
+# }
+# pak:pak("showtext")
+
+# Set up FontAwesome
+use_fontawesome <- FALSE
+if (file.exists("./fontawesome-webfont.ttf")) {
+  font_add('FontAwesome', './fontawesome-webfont.ttf')
+  showtext_auto()
+  use_fontawesome <- TRUE
+  message("FontAwesome font loaded successfully")
+} else {
+  warning("FontAwesome font not found. Using circle fallback.")
+}
+
+# Helper function to create nicer labels
+nice_label <- function(x) {
+  x %>% 
+    str_replace_all("_", " ") %>%
+    str_to_title()
+}
+
+# Get current date
+report_date <- format(Sys.Date(), "%Y-%m-%d")
+```
+
+```{r load-data, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
+#| label: load-data
+
+# Set paths
+score_files <- list.files(".", pattern = "pgs.txt", full.names = FALSE)
+popsim_files <- list.files(".", pattern = "popsimilarity.txt", full.names = FALSE)
+
+# Load score data
+scores <- read_tsv(file.path(score_files))
+popsim <- read_tsv(file.path(popsim_files))
+
+# Create comprehensive data with all necessary variables
+scores_popsim <- scores %>%
+  left_join(popsim %>% select(IID, MostSimilarPop), by = "IID") %>% 
+  mutate(simple_id = str_extract(IID, "[^_]+$"))
+
+# Calculate percentiles for each PRS score separately
+scores_popsim <- scores_popsim %>%
+  group_by(PGS) %>%
+  mutate(Overall_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
+  group_by(PGS, MostSimilarPop) %>%
+  mutate(Population_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
+  ungroup()
+
+# params$patient_id <- "10003"
+patient_id <- "BCIA-01025256"
+# Look up full IID from simple ID
+full_patient_id <- scores_popsim %>%
+  filter(simple_id == patient_id) %>%
+  pull(IID) %>%
+  first()
+
+if (is.na(full_patient_id)) {
+  stop("Patient ID not found")
+}
+
+# Get all PRS scores for this patient
+patient_pgs_scores <- scores_popsim %>%
+  filter(IID == full_patient_id) %>%
+  pull(PGS) %>%
+  unique()
+
+# Get first PRS score for testing
+test_pgs_id <- patient_pgs_scores[1]
+
+# Get patient data for testing
+patient_data <- scores_popsim %>%
+  filter(IID == full_patient_id, PGS == test_pgs_id)
+
+patient_percentile <- patient_data %>% pull(Overall_Percentile)
+```
+
+# Debug PRS Report
+
+**Date:** `r report_date`  
+**Patient ID:** `r params$patient_id`  
+**Test PRS:** `r test_pgs_id`  
+**Patient Percentile:** `r patient_percentile`
+
+## Test Bell Curve
+
+### Step 1: Basic Bell Curve Data
+```{r bell-data, echo=FALSE}
+#| label: bell-data
+
+# Create bell curve data
+x <- rnorm(500)
+y <- dnorm(x)
+df <- data.frame(x=x, y=y)
+q <- quantile(df$x)
+
+df_plot <- ggplot(df) + geom_line(aes(x,y)) + 
+           scale_x_continuous(breaks= seq(-4,4,0.5)) +
+           annotate(geom="text", x=q, y=0, label=names(q)) + 
+           theme(text = element_text(size=22))
+df_plot
+```
+
+
+
+### Step 2: Add Risk Zones
+```{r bell-zones, echo=FALSE, fig.width=12, fig.height=8}
+#| label: bell-zones
+
+# Add risk zones to the working plot
+df_plot +
+  annotate("rect", xmin = -4, xmax = -1.5, ymin = 0, ymax = 0.4, 
+           fill = "lightblue", alpha = 0.3) +
+  annotate("rect", xmin = -1.5, xmax = 1.5, ymin = 0, ymax = 0.4, 
+           fill = "lightyellow", alpha = 0.3) +
+  annotate("rect", xmin = 1.5, xmax = 4, ymin = 0, ymax = 0.4, 
+           fill = "lightcoral", alpha = 0.3)
+```
+
+### Step 3: Add Patient Marker
+```{r bell-patient, echo=FALSE, fig.width=12, fig.height=8}
+#| label: bell-patient
+
+# Add patient marker to the working plot
+df_plot +
+  annotate("rect", xmin = -4, xmax = -1.5, ymin = 0, ymax = 0.4, 
+           fill = "lightblue", alpha = 0.3) +
+  annotate("rect", xmin = -1.5, xmax = 1.5, ymin = 0, ymax = 0.4, 
+           fill = "lightyellow", alpha = 0.3) +
+  annotate("rect", xmin = 1.5, xmax = 4, ymin = 0, ymax = 0.4, 
+           fill = "lightcoral", alpha = 0.3) +
+  geom_vline(xintercept = qnorm(patient_percentile/100), color = "red", linewidth = 2) +
+  annotate("text", x = qnorm(patient_percentile/100), y = 0.4, 
+           label = paste("Patient:", round(patient_percentile), "th percentile"), 
+           color = "red", size = 5, hjust = -0.1)
+```
+
+### Step 4: Add Labels and Icons
+```{r bell-labels, echo=FALSE, fig.width=16, fig.height=4}
+#| label: bell-labels
+
+# Complete bell curve with all elements
+df_plot +
+  annotate("rect", xmin = -4, xmax = -1.5, ymin = 0, ymax = 0.4, 
+           fill = "lightblue", alpha = 0.3) +
+  annotate("rect", xmin = -1.5, xmax = 1.5, ymin = 0, ymax = 0.4, 
+           fill = "lightyellow", alpha = 0.3) +
+  annotate("rect", xmin = 1.5, xmax = 4, ymin = 0, ymax = 0.4, 
+           fill = "lightcoral", alpha = 0.3) +
+  # Patient line (limited height to match bell curve)
+  annotate("segment", x = qnorm(patient_percentile/100), xend = qnorm(patient_percentile/100), 
+           y = 0, yend = 0.4, color = "red", linewidth = 2) +
+  # Add human icons in each risk zone using FontAwesome - positioned very close to x-axis
+  annotate("text", x = -2.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+           family = if(use_fontawesome) "FontAwesome" else "sans",
+           size = 8, color = "blue") +
+  annotate("text", x = -0.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+           family = if(use_fontawesome) "FontAwesome" else "sans",
+           size = 8, color = "gray50") +
+  annotate("text", x = 0, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+           family = if(use_fontawesome) "FontAwesome" else  "sans",
+           size = 8, color = "gray50") +
+  annotate("text", x = 0.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+           family = if(use_fontawesome) "FontAwesome" else "sans",
+           size = 8, color = "gray50") +
+  annotate("text", x = 2.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+           family = if(use_fontawesome) "FontAwesome" else "sans",
+           size = 8, color = "red") +
+  # Patient marker icon - positioned at bell curve height
+  annotate("text", x = qnorm(patient_percentile/100), y = 0.4, 
+           label = if(use_fontawesome) "\uf007" else "●", 
+           family = if(use_fontawesome) "FontAwesome" else "sans",
+           size = 12, color = "red") +
+  # Risk labels - positioned below the icons
+  annotate("text", x = -2.5, y = 0.05, label = "Lower Risk", size = 4) +
+  annotate("text", x = 0, y = 0.05, label = "Average Risk", size = 4) +
+  annotate("text", x = 2.5, y = 0.05, label = "Higher Risk", size = 4) +
+  # Text below the red patient marker line
+  annotate("text", x = qnorm(patient_percentile/100), y = 0.45, 
+           label = paste0("Your polygenic score is in the ", round(patient_percentile), "th percentile"), 
+           color = "black", size = 4) +
+  # Limit y-axis to include text and remove axis ticks
+  scale_y_continuous(limits = c(0, 0.5)) +
+  # Publication theme without grids and axis ticks
+  theme_pubr(base_size = 16) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5)
+  ) +
+  labs(
+    title = paste("Polygenic Risk Score:", test_pgs_id),
+    subtitle = "Normal Distribution with Risk Zones"
+  )
+```
+
+## Test Horizontal Risk Bar
+
+```{r horizontal-bar-test, echo=FALSE, fig.width=14, fig.height=4}
+#| label: horizontal-bar-test
+
+# Create horizontal risk bar visualization
+ggplot() +
+  # Main horizontal bar with gradient colors
+  geom_rect(aes(xmin = 0, xmax = 20, ymin = 0, ymax = 1), 
+            fill = "#3498db", alpha = 0.8) +  # Softer blue
+  geom_rect(aes(xmin = 20, xmax = 80, ymin = 0, ymax = 1), 
+            fill = "#ecf0f1", alpha = 0.8) +  # Light gray
+  geom_rect(aes(xmin = 80, xmax = 100, ymin = 0, ymax = 1), 
+            fill = "#e74c3c", alpha = 0.8) +  # Softer red
+  
+  # Human icons on the bar
+  # Low risk (1 icon)
+  geom_text(aes(x = 10, y = 0.5), label = if(use_fontawesome) "\uf007" else "●", 
+            family = if(use_fontawesome) "FontAwesome" else "sans",
+            size = 12, color = "#2980b9") +
+  
+  # Average risk (7 icons)
+  geom_text(aes(x = 30, y = 0.5), label = if(use_fontawesome) "\uf007" else "●", 
+            family = if(use_fontawesome) "FontAwesome" else "sans",
+            size = 12, color = "#7f8c8d") +
+  geom_text(aes(x = 40, y = 0.5), label = if(use_fontawesome) "\uf007" else "●", 
+            family = if(use_fontawesome) "FontAwesome" else "sans",
+            size = 12, color = "#7f8c8d") +
+  geom_text(aes(x = 50, y = 0.5), label = if(use_fontawesome) "\uf007" else "●", 
+            family = if(use_fontawesome) "FontAwesome" else "sans",
+            size = 12, color = "#7f8c8d") +
+  geom_text(aes(x = 60, y = 0.5), label = if(use_fontawesome) "\uf007" else "●", 
+            family = if(use_fontawesome) "FontAwesome" else "sans",
+            size = 12, color = "#7f8c8d") +
+  geom_text(aes(x = 70, y = 0.5), label = if(use_fontawesome) "\uf007" else "●", 
+            family = if(use_fontawesome) "FontAwesome" else "sans",
+            size = 12, color = "#7f8c8d") +
+  
+  # High risk (1 icon)
+  geom_text(aes(x = 90, y = 0.5), label = if(use_fontawesome) "\uf007" else "●", 
+            family = if(use_fontawesome) "FontAwesome" else "sans",
+            size = 12, color = "#c0392b") +
+  
+  # Patient marker
+  geom_vline(xintercept = patient_percentile, color = "black", linewidth = 2) +
+  geom_text(aes(x = patient_percentile, y = 1.5), 
+            label = if(use_fontawesome) "\uf007" else "●", 
+            family = if(use_fontawesome) "FontAwesome" else "sans",
+            size = 16, color = risk_info$color) +
+  
+  # Risk labels below
+  geom_text(aes(x = 10, y = -0.3), label = "Lower risk", 
+            size = 10, color = "#2980b9", fontface = "bold") +
+  geom_text(aes(x = 50, y = -0.3), label = "Average risk", 
+            size = 10, color = "#2c3e50", fontface = "bold") +
+  geom_text(aes(x = 90, y = -0.3), label = "Higher risk", 
+            size = 10, color = "#c0392b", fontface = "bold") +
+  
+  # Percentile markers
+  geom_text(aes(x = 0, y = -0.6), label = "0", size = 8, fontface = "bold") +
+  geom_text(aes(x = 20, y = -0.6), label = "20", size = 8, fontface = "bold") +
+  geom_text(aes(x = 50, y = -0.6), label = "50", size = 8, fontface = "bold") +
+  geom_text(aes(x = 80, y = -0.6), label = "80", size = 8, fontface = "bold") +
+  geom_text(aes(x = 100, y = -0.6), label = "100", size = 8, fontface = "bold") +
+  
+  # Scales and theme
+  scale_x_continuous(limits = c(-5, 105), breaks = c(0, 20, 50, 80, 100)) +
+  scale_y_continuous(limits = c(-0.8, 2)) +
+  labs(
+    title = "Risk Level Distribution",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 24, face = "bold", hjust = 0.5, margin = margin(b = 15)),
+    plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+```
+
+## Test Grid Risk Visualization
+
+```{r grid-risk-test, echo=FALSE, fig.width=12, fig.height=8}
+#| label: grid-risk-test
+
+# Create grid positions (10 rows x 10 columns)
+n_rows <- 10
+n_cols <- 10
+grid_positions <- expand.grid(
+  row = 1:n_rows,
+  col = 1:n_cols
+) %>%
+  mutate(
+    percentile_range = case_when(
+      row == 1 ~ "0-10",
+      row == 10 ~ "91-100",
+      TRUE ~ paste0(((row - 1) * 10 + 1), "-", (row * 10))
+    ),
+    row_start = (row - 1) * 10,
+    row_end = row * 10,
+    is_patient_row = patient_percentile > row_start & patient_percentile <= row_end
+  )
+
+# Create the plot
+ggplot(grid_positions, aes(x = col, y = row, color = is_patient_row)) +
+  annotate(
+    "segment",
+    x = n_cols + 1.2,
+    xend = n_cols + 1.2,
+    y = 1,
+    yend = n_rows,
+    arrow = arrow(length = unit(0.3, "cm"), ends = "last"),
+    color = "black"
+  ) +
+  geom_text(
+    label = if(use_fontawesome) "\uf007" else "●",
+    family = if(use_fontawesome) "FontAwesome" else "sans",
+    size = 16,
+    vjust = 0.5,
+    hjust = 0.5,
+    show.legend = FALSE
+  ) +
+  scale_color_manual(values = c("FALSE" = "gray80", "TRUE" = "#3366CC")) +
+  scale_y_continuous(
+    breaks = 1:n_rows,
+    labels = c("0-10", "11-20", "21-30", "31-40", "41-50", 
+              "51-60", "61-70", "71-80", "81-90", "91-100"),
+    expand = expansion(mult = c(0.05, 0.05))
+  ) +
+  scale_x_continuous(
+    expand = expansion(mult = c(0.02, 0.15)),
+    limits = c(0.5, n_cols + 1.5)
+  ) +
+  labs(
+    title = "Overall Risk Percentile",
+    subtitle = paste0(round(patient_percentile, 1), "th percentile"),
+    y = "Percentile Range",
+    x = NULL
+  ) +
+  theme_pubr(base_size = 32) +
+  theme(
+    plot.title = element_text(size = 42, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 36, hjust = 0.5),
+    axis.title = element_text(size = 36, face = "bold"),
+    axis.text = element_text(size = 30),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank()
+  ) +
+  annotate(
+    "text",
+    x = n_cols + 1.5,
+    y = n_rows,
+    label = "risque plus élevé",
+    hjust = 0,
+    vjust = 0.5,
+    size = 12
+  ) +
+  annotate(
+    "text",
+    x = n_cols + 1.5,
+    y = 1,
+    label = "risque plus faible",
+    hjust = 0,
+    vjust = -0.5,
+    size = 12
+  )
+```
+
+## Test Density Plot
+
+```{r density-test, echo=FALSE, fig.width=12, fig.height=8}
+#| label: density-test
+
+# Filter data for the test PRS
+filtered_data <- scores_popsim %>% filter(PGS == test_pgs_id)
+
+# Get the x-axis limits for arrow placement
+max_density <- max(density(filtered_data$Z_MostSimilarPop)$y)
+
+ggplot() +
+  geom_density(
+    data = filtered_data,
+    aes(x = Z_MostSimilarPop),
+    fill = "steelblue",
+    alpha = 0.5,
+    color = "black",
+    linewidth = 1.5
+  ) +
+  geom_vline(
+    data = filtered_data %>% filter(IID == full_patient_id),
+    aes(xintercept = Z_MostSimilarPop),
+    color = "red",
+    linetype = "dashed",
+    linewidth = 1.5
+  ) +
+  geom_text(
+    data = filtered_data %>% filter(IID == full_patient_id),
+    aes(x = Z_MostSimilarPop, y = max_density * 0.9, 
+        label = paste("Patient", params$patient_id)),
+    color = "red",
+    hjust = -0.1,
+    vjust = 0,
+    size = 12
+  ) +
+  labs(
+    title = "Overall Distribution of PRS Scores",
+    x = "Z-Score (Most Similar Population)",
+    y = "Density"
+  ) +
+  theme_pubr(base_size = 28) +
+  theme(
+    plot.title = element_text(size = 36, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 32, face = "bold"),
+    axis.text = element_text(size = 28),
+    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)
+  )
+```
+
+## Test Histogram
+
+```{r histogram-test, echo=FALSE, fig.width=12, fig.height=8}
+#| label: histogram-test
+
+# Filter data for the test PRS
+filtered_data <- scores_popsim %>% filter(PGS == test_pgs_id)
+
+# Get the x-axis limits for arrow placement
+max_density <- max(density(filtered_data$Z_MostSimilarPop)$y)
+
+ggplot(filtered_data, aes(x = Z_MostSimilarPop)) +
+  geom_histogram(binwidth = 0.5, fill = "steelblue", alpha = 0.7, color = "black", linewidth = 0.8) +
+  # Add vertical line for patient
+  geom_vline(
+    data = filtered_data %>% filter(IID == full_patient_id),
+    aes(xintercept = Z_MostSimilarPop),
+    color = "red",
+    linetype = "dashed",
+    linewidth = 1.5
+  ) +
+  # Add text annotation for patient
+  geom_text(
+    data = filtered_data %>% filter(IID == full_patient_id),
+    aes(x = Z_MostSimilarPop, y = max_density * 0.8, 
+        label = paste("Patient", params$patient_id)),
+    color = "red",
+    hjust = -0.1,
+    vjust = -10,
+    size = 12
+  ) +
+  labs(
+    title = "Distribution of PRS Scores",
+    subtitle = "Patient highlighted in red",
+    x = "Z-Score (Most Similar Population)",
+    y = "Frequency"
+  ) +
+  theme_pubr(base_size = 28) +
+  theme(
+    plot.title = element_text(size = 36, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 32, hjust = 0.5),
+    axis.title = element_text(size = 32, face = "bold"),
+    axis.text = element_text(size = 28),
+    plot.margin = margin(t = 20, r = 20, b = 20, l = 20)
+  )
+```
+
+## Test Boxplot
+
+```{r boxplot-test, echo=FALSE, fig.width=12, fig.height=8}
+#| label: boxplot-test
+
+# Filter data for the test PRS
+filtered_data <- scores_popsim %>% filter(PGS == test_pgs_id)
+
+ggplot(filtered_data, aes(x = PGS, y = Z_MostSimilarPop)) +
+  # Add boxplot
+  geom_boxplot(alpha = 0.7, width = 0.5, size = 1.5, outlier.size = 3) +
+  # Highlight patient point
+  geom_point(
+    data = filtered_data %>% filter(IID == full_patient_id),
+    size = 10,
+    shape = 17,
+    color = "red"
+  ) +
+  # Add mean line
+  stat_summary(
+    fun = mean,
+    geom = "crossbar",
+    width = 0.5,
+    size = 1.2,
+    color = "darkblue"
+  ) +
+  labs(
+    title = "Distribution des scores PRS",
+    subtitle = paste("Patient", params$patient_id, "en rouge"),
+    x = NULL,
+    y = "Score PRS (Z_MostSimilarPop)"
+  ) +
+  theme_pubr(base_size = 28) +
+  theme(
+    plot.title = element_text(size = 36, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 32, hjust = 0.5),
+    axis.title = element_text(size = 32, face = "bold"),
+    axis.text = element_text(size = 28)
+  )
+```
+
+## Patient Summary Table
+
+```{r summary-table, echo=FALSE}
+#| label: summary-table
+
+# Display summary for this patient
+patient_summary_table <- scores_popsim %>%
+  filter(IID == full_patient_id) %>%
+  select(PGS, Z_MostSimilarPop, Overall_Percentile) %>%
+  distinct() %>%
+  rename(
+    "Score Type" = PGS,
+    "Score" = Z_MostSimilarPop,
+    "Overall Percentile" = Overall_Percentile
+  )
+
+# For HTML output, use kable
+knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c", 
+             caption = paste("Résumé de tous les scores PRS pour le patient", params$patient_id))
+```
+
+## Explanation Text
+
+**Explication du score polygénique :** Votre score polygénique se situe au **`r patient_percentile`e percentile**. Cela ne signifie pas que vous avez une probabilité de `r patient_percentile`% de développer cette condition. Cela signifie plutôt que sur 100 personnes, votre score polygénique est plus élevé que celui de `r patient_percentile` personnes et identique ou inférieur à celui de `r 100 - patient_percentile` personnes. 

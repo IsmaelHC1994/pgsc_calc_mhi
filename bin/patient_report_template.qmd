@@ -167,6 +167,136 @@ scale_plot <- function(p) {
   )
 }
 
+# Function to create bell curve visualization with human icons and risk levels
+create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
+  # Get patient data, filtered by PRS if provided
+  filtered_data <- if (!is.null(pgs_id)) {
+    scores_popsim %>% filter(PGS == pgs_id)
+  } else {
+    scores_popsim
+  }
+  
+  if(nrow(filtered_data %>% filter(IID == full_patient_id)) == 0) {
+    return(ggplot() + annotate("text", x = 0, y = 0, label = "Patient not found") + 
+           theme_void())
+  }
+
+  # Get patient percentile
+  patient_percentile <- filtered_data %>%
+    filter(IID == full_patient_id) %>%
+    pull(Overall_Percentile)
+  
+  # Create data for bell curve using normal distribution
+  x <- rnorm(500)
+  df_plot <- data.frame(x = x, y = dnorm(x))
+  
+  # Create the plot with proper bell curve
+  ggplot(df_plot, aes(x = x, y = y)) +
+    # Bell curve background
+    geom_line(color = "gray70", linewidth = 2, alpha = 0.8) +
+    geom_ribbon(aes(ymin = 0, ymax = y), fill = "gray90", alpha = 0.3) +
+    
+    # Color-coded risk sections
+    annotate("rect", xmin = -4, xmax = -1.5, ymin = 0, ymax = 0.4, 
+             fill = "lightblue", alpha = 0.3) +
+    annotate("rect", xmin = -1.5, xmax = 1.5, ymin = 0, ymax = 0.4, 
+             fill = "lightyellow", alpha = 0.3) +
+    annotate("rect", xmin = 1.5, xmax = 4, ymin = 0, ymax = 0.4, 
+             fill = "lightcoral", alpha = 0.3) +
+    
+    # Patient line (limited height to match bell curve)
+    annotate("segment", x = qnorm(patient_percentile/100), xend = qnorm(patient_percentile/100), 
+             y = 0, yend = 0.4, color = "red", linewidth = 2) +
+    
+    # Add human icons in each risk zone using FontAwesome - positioned very close to x-axis
+    annotate("text", x = -2.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 8, color = "blue") +
+    annotate("text", x = -0.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 8, color = "gray50") +
+    annotate("text", x = 0, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 8, color = "gray50") +
+    annotate("text", x = 0.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 8, color = "gray50") +
+    annotate("text", x = 2.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 8, color = "red") +
+    
+    # Patient marker icon - positioned at bell curve height
+    annotate("text", x = qnorm(patient_percentile/100), y = 0.4, 
+             label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 12, color = "red") +
+    
+    # Risk labels - positioned below the icons
+    annotate("text", x = -2.5, y = 0.05, label = "Lower Risk", size = 4) +
+    annotate("text", x = 0, y = 0.05, label = "Average Risk", size = 4) +
+    annotate("text", x = 2.5, y = 0.05, label = "Higher Risk", size = 4) +
+    
+    # Text below the red patient marker line
+    annotate("text", x = qnorm(patient_percentile/100), y = 0.45, 
+             label = paste0("Your polygenic score is in the ", round(patient_percentile), "th percentile"), 
+             color = "black", size = 4) +
+    
+    # Limit y-axis to include text and remove axis ticks
+    scale_y_continuous(limits = c(0, 0.5)) +
+    
+    # Publication theme without grids and axis ticks
+    theme_pubr(base_size = 16) +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.title = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 14, hjust = 0.5)
+    ) +
+    labs(
+      title = paste("Polygenic Risk Score:", if(!is.null(pgs_id)) pgs_id else "Overall"),
+      subtitle = "Normal Distribution with Risk Zones"
+    )
+    
+    # Labels for risk sections
+    geom_text(aes(x = 10, y = 0.2), label = "Fewer individuals have\ndecreased risk", 
+              size = 4, color = "#4575b4") +
+    geom_text(aes(x = 50, y = 0.2), label = "Most individuals have\naverage risk", 
+              size = 4, color = "gray30") +
+    geom_text(aes(x = 90, y = 0.2), label = "Fewer individuals have\nincreased risk", 
+              size = 4, color = "#d73027") +
+    
+    # Percentile markers
+    geom_text(aes(x = 0, y = -0.1), label = "0 Percentile", size = 3) +
+    geom_text(aes(x = 5, y = -0.1), label = "5th", size = 3) +
+    geom_text(aes(x = 20, y = -0.1), label = "20th", size = 3) +
+    geom_text(aes(x = 50, y = -0.1), label = "50th", size = 3) +
+    geom_text(aes(x = 80, y = -0.1), label = "80th", size = 3) +
+    geom_text(aes(x = 95, y = -0.1), label = "95th", size = 3) +
+    geom_text(aes(x = 99, y = -0.1), label = "99th", size = 3) +
+    
+    # Scales and theme
+    scale_x_continuous(limits = c(-5, 105), breaks = c(0, 5, 20, 50, 80, 95, 99)) +
+    scale_y_continuous(limits = c(-0.2, 2)) +
+    labs(
+      title = if(!is.null(pgs_id)) paste("Polygenic Risk Score:", pgs_id) else "Polygenic Risk Score",
+      subtitle = "Genetic Risk Assessment",
+      x = NULL,
+      y = NULL
+    ) +
+    theme_void() +
+    theme(
+      plot.title = element_text(size = 24, face = "bold", hjust = 0.5, margin = margin(b = 10)),
+      plot.subtitle = element_text(size = 18, hjust = 0.5, margin = margin(b = 20)),
+      plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
+      plot.background = element_rect(fill = "white", color = NA)
+    )
+}
+
 # Function to create patient risk visualization with human icons - SIMPLIFIED to only show overall percentile
 create_patient_risk_viz <- function(patient_id, pgs_id = NULL) {
   # Get patient data, filtered by PRS if provided
@@ -488,6 +618,25 @@ knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c",
 for (pgs_id in patient_pgs_scores) {
   # Create section header
   cat("\n\n## Analyse du score PRS:", pgs_id, "\n\n")
+  
+  # NEW: Bell curve risk visualization
+  cat("\n\n### Évaluation du risque génétique pour", pgs_id, "\n\n")
+  
+  # Create and print bell curve visualization
+  bell_curve_plot <- create_bell_curve_risk_viz(params$patient_id, pgs_id)
+  print(bell_curve_plot)
+  
+  # Add explanation text
+  cat("\n\n")
+  cat("**Explication du score polygénique :** Votre score polygénique se situe au **", 
+      round(scores_popsim %>% filter(IID == full_patient_id, PGS == pgs_id) %>% pull(Overall_Percentile)), 
+      "e percentile**. Cela ne signifie pas que vous avez une probabilité de ", 
+      round(scores_popsim %>% filter(IID == full_patient_id, PGS == pgs_id) %>% pull(Overall_Percentile)), 
+      "% de développer cette condition. Cela signifie plutôt que sur 100 personnes, votre score polygénique est plus élevé que celui de ", 
+      round(scores_popsim %>% filter(IID == full_patient_id, PGS == pgs_id) %>% pull(Overall_Percentile)), 
+      " personnes et identique ou inférieur à celui de ", 
+      100 - round(scores_popsim %>% filter(IID == full_patient_id, PGS == pgs_id) %>% pull(Overall_Percentile)), 
+      " personnes.\n\n")
  
   # Risk visualization section
   cat("\n\n### Visualisation du risque pour", pgs_id, "\n\n")
