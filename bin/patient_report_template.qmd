@@ -297,7 +297,7 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
     )
 }
 
-# Function to create patient risk visualization with human icons - SIMPLIFIED to only show overall percentile
+# Function to create patient risk visualization with human icons - only show overall percentile
 create_patient_risk_viz <- function(patient_id, pgs_id = NULL) {
   # Get patient data, filtered by PRS if provided
   filtered_data <- if (!is.null(pgs_id)) {
