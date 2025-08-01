@@ -48,9 +48,7 @@ process PLINK2_VCF {
         --vcf $vcf \\
         --mind ${params.missingness_threshold} \\
         --missing \\
-        --not-chr 0 \\
-        --allow-extra-chr \\
-        --chr 1-22, X, Y, XY \\
+        --not-chr 0 \\ 
         --snps-only just-acgt \\
         --geno ${params.geno_threshold} \\
         --hwe ${params.hwe_threshold} midp \\
