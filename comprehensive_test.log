@@ -1,0 +1,30 @@
+PLINK v2.0.0-a.6.9LM AVX2 Intel (29 Jan 2025)
+Options in effect:
+  --make-pgen
+  --memory 6000
+  --mind 0.05
+  --missing
+  --not-chr 0
+  --out comprehensive_test
+  --snps-only just-acgt
+  --threads 2
+  --vcf /home/ihc/codebase/cag/bed_from_scores/results/comprehensive_test/vcf/comprehensive_test.pgsc.vcf.gz
+
+Hostname: icmThinkpadLap
+Working directory: /home/ihc/codebase/mhi-prs/run_pgsc_2_01_local
+Start time: Sun Aug  3 16:52:08 2025
+
+Random number seed: 1754254328
+11799 MiB RAM detected, ~7094 available; reserving 6000 MiB for main workspace.
+Using up to 2 compute threads.
+--vcf: 73057560 variants scanned.
+--vcf: comprehensive_test-temporary.pgen +
+comprehensive_test-temporary.pvar.zst + comprehensive_test-temporary.psam
+written.
+1 sample (0 females, 0 males, 1 ambiguous; 1 founder) loaded from
+comprehensive_test-temporary.psam.
+
+Error: Out of memory.  The --memory flag may be helpful.
+Failed allocation size: 584460544
+
+End time: Sun Aug  3 16:52:37 2025

@@ -1,6 +1,6 @@
 process PLINK2_RELABELPVAR {
     // labels are defined in conf/modules.config
-    label 'process_low'
+    label 'process_high_memory'
     label "${ params.copy_genomes ? 'copy_genomes' : '' }"
     label "plink2" // controls conda, docker, + singularity options
 
@@ -42,8 +42,8 @@ process PLINK2_RELABELPVAR {
     output = "${meta.build}_${prefix}_${meta.chrom}"
     """
     plink2 \\
-        --threads $task.cpus \\
-        --memory $mem_mb \\
+        --threads 2 \\
+        --memory 6000 \\
         --freq \\
         --missing vcols=fmissdosage,fmiss \\
         $args \\

@@ -57,8 +57,8 @@ process FILTER_VARIANTS {
     # 2. LD-thin variants in REFERENCE (filtered variants & samples) for input
     # into PCA -----------------------------------------------------------------
     plink2 \
-            --threads $task.cpus \
-            --memory $mem_mb \
+            --threads 2 \
+            --memory 6000 \
             --pfile vzs ${params.target_build}_reference \
             --indep-pairwise $params.indep_pairwise_ref \
             --exclude range $ld \
