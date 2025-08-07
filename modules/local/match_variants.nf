@@ -1,6 +1,6 @@
 process MATCH_VARIANTS {
     // labels are defined in conf/modules.config
-    label 'process_medium'
+    label 'process_high'
     label 'pgscatalog_utils' // controls conda, docker, + singularity options
 
     // first element of tag must be sampleset

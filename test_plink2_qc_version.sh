@@ -4,7 +4,7 @@
 echo "Testing QC version of PLINK2_VCF..."
 
 # Set variables
-VCF_FILE="/home/ihc/codebase/cag/bed_from_scores/results/comprehensive_test/vcf/comprehensive_test.pgsc.vcf.gz"
+VCF_FILE="/home/ihcasti/scratch/mhi-prs/comprehensive_test.pgsc.vcf.gz"
 OUTPUT_PREFIX="test_qc_version"
 WORK_DIR="/tmp/plink2_test_qc"
 
@@ -20,7 +20,7 @@ echo "Threads: 1"
 
 # Run the QC version command
 time plink2 \
-    --threads 1 \
+    --threads 2 \
     --memory 8000 \
     --snps-only just-acgt \
     --allow-extra-chr \
