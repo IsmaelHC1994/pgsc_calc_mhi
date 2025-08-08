@@ -17,7 +17,7 @@ process PLINK2_VCF {
     output:
     tuple val(meta), path("*.pgen")    , emit: pgen
     tuple val(meta), path("*.psam")    , emit: psam
-    tuple val(meta), path("*.pvar")    , emit: pvar
+    tuple val(meta), path("*.pvar.zst")    , emit: pvar
 
     tuple val(meta), path("*.smiss")   , emit: smiss   , optional: true
     tuple val(meta), path("*.vmiss")   , emit: vmiss   , optional: true
@@ -44,7 +44,7 @@ process PLINK2_VCF {
 
     plink2 \\
         --threads $task.cpus \\
-        --memory $task.memory \\
+        --memory $mem_mb \\
         --vcf $vcf \\
         --missing \\
         --not-chr 0 \\

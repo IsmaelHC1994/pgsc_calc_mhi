@@ -22,7 +22,6 @@ params:
 ---
 
 ```{r setup, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
-#| label: setup
 
 # Core data manipulation and visualization
 library(tidyverse)  # Includes dplyr, ggplot2, etc.
@@ -76,7 +75,6 @@ report_date <- format(Sys.Date(), "%Y-%m-%d")
 ```
 
 ```{r load-data, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
-#| label: load-data
 
 # test params$patient_id
 # assing 10003_10003 as test
@@ -152,7 +150,6 @@ pgs_bullet_list <- paste0("- **", patient_pgs_list, "**", collapse = "\n")
 
 
 ```{r functions, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
-#| label: functions
 
 # Add a direct scaling function for plots
 scale_plot <- function(p) {
@@ -167,31 +164,26 @@ scale_plot <- function(p) {
   )
 }
 
-# Function to create bell curve visualization with human icons and risk levels
 create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
-  # Get patient data, filtered by PRS if provided
+  # Restore original visual but ensure we always build on a ggplot object
   filtered_data <- if (!is.null(pgs_id)) {
-    scores_popsim %>% filter(PGS == pgs_id)
+    scores_popsim %>% dplyr::filter(PGS == pgs_id)
   } else {
     scores_popsim
   }
-  
-  if(nrow(filtered_data %>% filter(IID == full_patient_id)) == 0) {
-    return(ggplot() + annotate("text", x = 0, y = 0, label = "Patient not found") + 
-           theme_void())
+
+  if (nrow(filtered_data %>% dplyr::filter(IID == full_patient_id)) == 0) {
+    return(ggplot() + annotate("text", x = 0, y = 0, label = "Patient not found") + theme_void())
   }
 
-  # Get patient percentile
   patient_percentile <- filtered_data %>%
-    filter(IID == full_patient_id) %>%
-    pull(Overall_Percentile)
-  
-  # Create data for bell curve using normal distribution
+    dplyr::filter(IID == full_patient_id) %>%
+    dplyr::pull(Overall_Percentile)
+
   x <- rnorm(500)
   df_plot <- data.frame(x = x, y = dnorm(x))
-  
-  # Create the plot with proper bell curve
-  ggplot(df_plot, aes(x = x, y = y)) +
+
+  p <- ggplot(df_plot, aes(x = x, y = y)) +
     # Bell curve background
     geom_line(color = "gray70", linewidth = 2, alpha = 0.8) +
     geom_ribbon(aes(ymin = 0, ymax = y), fill = "gray90", alpha = 0.3) +
@@ -260,7 +252,7 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
     labs(
       title = paste("Polygenic Risk Score:", if(!is.null(pgs_id)) pgs_id else "Overall"),
       subtitle = "Normal Distribution with Risk Zones"
-    )
+    ) +
     
     # Labels for risk sections
     geom_text(aes(x = 10, y = 0.2), label = "Fewer individuals have\ndecreased risk", 
@@ -295,6 +287,8 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
       plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
       plot.background = element_rect(fill = "white", color = NA)
     )
+
+  return(p)
 }
 
 # Function to create patient risk visualization with human icons - only show overall percentile
@@ -586,7 +580,6 @@ Les principales restrictions comprennent une héritabilité incomplète et une c
 [^1]: Lambert, S.A., Wingfield, B. et al. (2024) Enhancing the Polygenic Score Catalog with tools for score calculation and ancestry normalization. *Nature Genetics*. doi:10.1038/s41588-024-01937-x.
 
 ```{r}
-#| label: overall-summary
 #| echo: false
 #| warning: false
 #| message: false
@@ -608,7 +601,6 @@ knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c",
 ```
 
 ```{r generate-sections, results='asis', echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=8, out.width="100%"}
-#| label: generate-sections
 #| fig-width: 12
 #| fig-height: 8
 #| out-width: "100%"
