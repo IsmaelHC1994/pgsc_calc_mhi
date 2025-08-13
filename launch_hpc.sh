@@ -26,5 +26,6 @@ nextflow run main.nf \
     --liftover \
     --hg19_chain /home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/hg19ToHg38.over.chain.gz \
     --hg38_chain /home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/hg38ToHg19.over.chain.gz \
+    --target_scores_report "brugadaMTAGnoOverlap" \
     -resume \
     -with-trace traceMHI_$(date +%Y%m%d_%H%M%S).txt 2>&1 | tee "${LOG_FILE}"

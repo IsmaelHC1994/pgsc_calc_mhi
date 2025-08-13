@@ -1,67 +1,78 @@
 #!/usr/bin/env Rscript
 
-library(tidyverse)
-library(quarto)
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(quarto)
+})
 
-template_file <- "patient_report_template.qmd"
+# ------------------------------------------------------------------
+# Args: --subset_scores=PGS_A,PGS_B --suffix=subset --outdir=reports
+# ------------------------------------------------------------------
+args <- commandArgs(trailingOnly = TRUE)
+get_arg <- function(key, default = "") {
+  hit <- grep(paste0('^--', key, '='), args, value = TRUE)
+  if (length(hit) == 0) return(default)
+  sub(paste0('^--', key, '='), '', hit[1])
+}
+
+subset_scores_arg <- get_arg('subset_scores', '')
+suffix <- get_arg('suffix', '')
+outdir <- get_arg('outdir', '.')
+template_file <- get_arg('template', 'patient_report_template.qmd')
+
+dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
 
 # Load the data to get patient IDs - handle gzipped files directly
-scores <- read_tsv(gzfile(list.files(pattern = "pgs.txt.gz", full.names = TRUE)[1]))
-popsim <- read_tsv(gzfile(list.files(pattern = "popsimilarity.txt.gz", full.names = TRUE)[1]))
+pgs_path <- list.files(pattern = 'pgs\\.txt\\.gz$', full.names = TRUE)[1]
+pop_path <- list.files(pattern = 'popsimilarity\\.txt\\.gz$', full.names = TRUE)[1]
+stopifnot(!is.na(pgs_path), !is.na(pop_path))
+
+scores <- readr::read_tsv(gzfile(pgs_path), show_col_types = FALSE)
+if (nzchar(subset_scores_arg)) {
+  subset_vec <- strsplit(subset_scores_arg, ',')[[1]] |> trimws()
+  scores <- dplyr::filter(scores, PGS %in% subset_vec)
+}
+popsim <- readr::read_tsv(gzfile(pop_path), show_col_types = FALSE)
 
 # Create run_patient_data
 scores_popsim <- scores %>%
-  left_join(popsim %>% select(IID, MostSimilarPop), by = "IID")
+  left_join(popsim %>% select(IID, MostSimilarPop), by = 'IID')
 
 run_patient_data <- scores_popsim %>%
-  filter(sampleset != "reference") %>%
-  # Create a simple ID column using the last part after underscore
-  mutate(simple_id = str_extract(IID, "[^_]+$")) %>%
+  filter(sampleset != 'reference') %>%
+  mutate(simple_id = str_extract(IID, '[^_]+$')) %>%
   mutate(Overall_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
   group_by(MostSimilarPop) %>%
   mutate(Population_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
-  ungroup()  %>% # remove the pipe command and comment below for all non-reference patients
-  head(2)  # TODO: for testing. atm should wait only 1 patient (1 vcf), potentially multiple scorefiles 
-  # head(64)  # NOVASEQX max WGS 30x
+  ungroup()
 
 # Get list of all patient IDs
 all_patient_ids <- unique(run_patient_data$simple_id)
 
-# Save all patient summaries to file
-output_file <- file.path(".", "patient_summaries.csv")
+# Write optional subset CSV
+if (nzchar(subset_scores_arg)) {
+  readr::write_csv(scores, file.path(outdir, 'pgs_subset.csv'))
+}
+
+# Save small summary for convenience
+output_file <- file.path(outdir, if (nzchar(suffix)) paste0('patient_summaries_', suffix, '.csv') else 'patient_summaries.csv')
 text_data <- run_patient_data %>%
-  # Format the summary line
-  mutate(
-    Summary = sprintf(
-      "Patient: %s, Score: %s, Overall Percentile: %.1f%%",
-      IID,
-      Z_MostSimilarPop,
-      Overall_Percentile
-    )
-  )
-
-# Save all data to file
+  transmute(Summary = sprintf('Patient: %s, Score: %s, Overall Percentile: %.1f%%', IID, Z_MostSimilarPop, Overall_Percentile))
 writeLines(text_data$Summary, output_file)
-message(paste("Patient summaries saved to:", normalizePath(output_file)))
+message(paste('Patient summaries saved to:', normalizePath(output_file)))
 
-# print template file
-# check if file exists
-if (file.exists(file.path(".", template_file))) {
-  print(paste("Template file exists:", file.path(".", template_file)))
-} else {
-  print(paste("Template file does not exist:", file.path(".", template_file)))
+if (!file.exists(template_file)) {
+  warning(paste('Template not found:', template_file))
 }
 
 # Render report for each patient
 for (pid in all_patient_ids) {
-  message(sprintf("Generating reports for patient %s...", pid))
-  
-  # Generate HTML report with embedded resources
-  message("  Generating HTML report...")
-  quarto_render(
-    input = file.path(".", template_file),
-    output_format = "html",
-    output_file = paste0("patient_", pid, "_report.html"),
+  message(sprintf('Generating reports for patient %s...', pid))
+  outfile <- paste0('patient_', pid, if (nzchar(suffix)) paste0('_', suffix) else '', '_report.html')
+  quarto::quarto_render(
+    input = template_file,
+    output_format = 'html',
+    output_file = file.path(outdir, outfile),
     execute_params = list(patient_id = pid)
   )
 }

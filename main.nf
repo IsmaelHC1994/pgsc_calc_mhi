@@ -16,9 +16,8 @@ nextflow.enable.dsl = 2
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-// Import QC modules
-include { PLINK2_VCF } from './modules/local/plink2/vcf/main'
-include { FLAG_SAMPLES_AWK } from './modules/local/flag_samples/main'
+// Import conversion module (VCF -> PLINK2 pgen)
+include { PLINK2_VCF } from './modules/local/plink2_vcf'
 
 include { PGSCCALC } from './workflows/pgsc_calc'
 /*
@@ -64,7 +63,7 @@ process COLLECT_SCOREFILES {
 process GENERATE_REPORTS {
     label 'process_low'
     container = 'docker.io/ismaelhc94/pgsc-mhi-report'
-    publishDir "${params.outdir}/${params.sampleset}/reports", mode: 'symlink'
+    publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
     
     input:
     path(result_files)
@@ -73,6 +72,9 @@ process GENERATE_REPORTS {
     
     output:
     path "patient*.html"
+    path "patient_summaries.csv"
+    path "subset/patient*subset_report.html", optional: true
+    path "subset/pgs_subset.csv", optional: true
     
     script:
     def font_setup = fontawesome_font.name != 'NO_FILE' ? 
@@ -91,6 +93,9 @@ process GENERATE_REPORTS {
     # Copy the provided template to work directory with a new name
     cp ${report_template} working_patient_report_template.qmd
     
+    # Expose optional subset scores to R
+    export SUBSET_SCORES='${params.target_scores_report ?: ''}'
+
     # Run R script directly
     Rscript --vanilla -e "
     library(tidyverse)
@@ -154,89 +159,64 @@ process GENERATE_REPORTS {
         execute_params = list(patient_id = pid)
       )
     }
+
+    # Optional: subset report generation if SUBSET_SCORES provided
+    subset_arg <- Sys.getenv('SUBSET_SCORES')
+    if (nzchar(subset_arg)) {
+      message('Subset scores requested: ', subset_arg)
+      subset_vec <- strsplit(subset_arg, ',')[[1]] |> trimws()
+      pgs_path <- list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]
+      pop_path <- list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]
+      scores_all <- read_tsv(gzfile(pgs_path))
+      scores_sub <- dplyr::filter(scores_all, PGS %in% subset_vec)
+      if (nrow(scores_sub) == 0) {
+        warning('No rows found for requested subset scores; skipping subset report')
+      } else {
+        dir.create('subset', showWarnings = FALSE)
+        pop_all <- read_tsv(gzfile(pop_path))
+        # Reuse existing pipeline on the filtered scores
+        scores_popsim_sub <- scores_sub %>%
+          dplyr::left_join(pop_all %>% dplyr::select(IID, MostSimilarPop), by = 'IID') %>%
+          dplyr::mutate(simple_id = stringr::str_extract(IID, '[^_]+\\\$'))
+        run_patient_data_sub <- scores_popsim_sub %>%
+          dplyr::filter(sampleset != 'reference') %>%
+          dplyr::mutate(Overall_Percentile = round(dplyr::percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
+          dplyr::group_by(MostSimilarPop) %>%
+          dplyr::mutate(Population_Percentile = round(dplyr::percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
+          dplyr::ungroup()
+        # Write subset artifacts for publishing
+        readr::write_tsv(scores_sub, gzfile('subset/pgs.txt.gz'))
+        readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
+        readr::write_csv(scores_sub, 'subset/pgs_subset.csv')
+        # Save subset patient summaries
+        subset_summary_file <- file.path('subset', 'patient_summaries.csv')
+        subset_text_data <- run_patient_data_sub %>%
+          dplyr::mutate(
+            Summary = sprintf(
+              'Patient: %s, Score: %s, Overall Percentile: %.1f%%',
+              IID,
+              Z_MostSimilarPop,
+              Overall_Percentile
+            )
+          )
+        writeLines(subset_text_data\\\$Summary, subset_summary_file)
+        file.copy('working_patient_report_template.qmd', 'subset/working_patient_report_template.qmd', overwrite = TRUE)
+        # derive patient IDs from subset run (exclude HG00 references)
+        ids <- run_patient_data_sub %>%
+          dplyr::filter(!grepl('^HG00', IID)) %>%
+          dplyr::pull(simple_id) %>%
+          unique()
+        if (length(ids) > 0) {
+          owd <- getwd(); setwd('subset'); on.exit(setwd(owd), add = TRUE)
+          for (pid in ids) {
+            message(sprintf('Generating subset reports for patient %s...', pid))
+            quarto::quarto_render('working_patient_report_template.qmd', output_file = paste0('patient_', pid, '_subset_report.html'), execute_params = list(patient_id = pid))
+          }
+        }
+      }
+    }
     "
     """
-}
-
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    QC WORKFLOW FOR PREPROCESSING
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
-
-// Standalone QC workflow that generates a samplesheet for PGSC_CALC
-workflow QC {
-    main:
-    log.info """
-    ===========================================
-    PGSC_CALC: QC Preprocessing
-    ===========================================
-    VCF Files: ${params.vcf_files}
-    Sample Set: ${params.sampleset}
-    Output: ${params.outdir}/${params.sampleset}/qc/
-    ===========================================
-    """
-    
-    // Create input channel from direct VCF file inputs
-    ch_input = Channel
-        .fromPath(params.vcf_files)
-        .map { vcf_file -> 
-            def meta = [id: params.sampleset]
-            [ meta, vcf_file ]
-        }
-    
-    // Debug output for input channel
-    ch_input.view { meta, vcf_file ->
-        "Input entry: meta=${meta}, vcf_file=${vcf_file}"
-    }
-    
-    // Create VCF files channel with index files
-    vcf_files = ch_input.map { meta, vcf_file -> 
-        // Handle ICA project URIs using path() function which handles URIs better
-        def vcf
-        def tbi
-        
-        if (vcf_file.toString().startsWith('project://')) {
-            // For ICA project URIs, use file() without checkIfExists - ICA will resolve at runtime
-            vcf = file(vcf_file, checkIfExists: false)
-            tbi = file("${vcf_file}.tbi", checkIfExists: false)
-        } else {
-            // For local files, create file objects as usual
-            vcf = file(vcf_file)
-            def tbi_file = "${vcf_file}.tbi"
-            tbi = file(tbi_file).exists() ? file(tbi_file) : file('NO_FILE')
-        }
-        
-        log.info "Processing VCF: ${vcf} (index file: ${tbi})"
-        
-        return tuple(meta, vcf, tbi)
-    }
-    
-    // Run PLINK2_VCF to convert VCF to PLINK2 format
-    PLINK2_VCF(vcf_files)
-    
-    // Combine PLINK2 output files
-    ch_converted_vcf = PLINK2_VCF.out.pgen
-        .join(PLINK2_VCF.out.psam)
-        .join(PLINK2_VCF.out.pvar)
-        .map { meta, pgen, psam, pvar -> 
-            [meta, pgen, psam, pvar]
-        }
-    
-    // Run FLAG_SAMPLES_AWK to filter samples
-    FLAG_SAMPLES_AWK(
-        PLINK2_VCF.out.smiss
-        .join(ch_converted_vcf, by: 0)
-        .map { meta, smiss, pgen, psam, pvar -> 
-            [meta, smiss, pgen, psam, pvar]
-        }
-    )
-    
-    // Emit outputs - no longer need samplesheet
-    emit:
-    pgen = FLAG_SAMPLES_AWK.out.pgen
-    psam = FLAG_SAMPLES_AWK.out.psam
-    pvar = FLAG_SAMPLES_AWK.out.pvar
 }
 
 /*
@@ -288,22 +268,21 @@ workflow {
               "  - scorefile (individual scoring file path)"
     }
     
-    // Step 1: Run the QC workflow to generate samplesheet
-    QC()
-        
-    // Step 2: Run PGSC_CALC with direct genotype data from QC (bypassing samplesheet)
-    // Combine the QC outputs into a single channel for PGSC_CALC
-    ch_qc_geno_data = QC.out.pgen
-        .join(QC.out.psam)
-        .join(QC.out.pvar)
-        .map { meta, pgen, psam, pvar -> 
-            [meta, pgen, psam, pvar]
+    // Step 1: Convert VCF to PLINK2 pgen using upstream module (no samplesheet)
+    ch_vcf = Channel
+        .fromPath(params.vcf_files)
+        .map { vcf_file ->
+            def meta = [ id: params.sampleset, chrom: 'ALL', build: (params.target_build ?: 'GRCh38') ]
+            [ meta, file(vcf_file) ]
         }
-    
-    // log the ch_qc_geno_data
-    ch_qc_geno_data.view { meta, pgen, psam, pvar ->
-        "ch_qc_geno_data: meta=${meta}, pgen=${pgen}, psam=${psam}, pvar=${pvar}"
-    }
+
+    PLINK2_VCF(ch_vcf)
+
+    // Step 2: Build genotype tuple for PGSCCALC
+    ch_geno_data = PLINK2_VCF.out.pgen
+        .join(PLINK2_VCF.out.psam)
+        .join(PLINK2_VCF.out.pvar)
+        .map { meta, pgen, psam, pvar -> [meta, pgen, psam, pvar] }
     
     // log the ch_collected_scorefiles
     ch_collected_scorefiles.view { scorefile ->
@@ -311,7 +290,7 @@ workflow {
     }
     
     // Pass null for samplesheet since we're using direct genotype data
-    PGSCCALC(Channel.value(null), ch_collected_scorefiles, ch_qc_geno_data)
+    PGSCCALC(Channel.value(null), ch_collected_scorefiles, ch_geno_data)
     
     // Step 3: Generate reports using both score files and ancestry results from PGSC_CALC
     // Extract just the file paths from the metadata tuples
@@ -326,31 +305,11 @@ workflow {
     
     // Generate reports using all results and the provided template
     GENERATE_REPORTS(all_result_files, file(params.report_template), fontawesome_input)
-    
+
 }
 
 // Add a dedicated workflow for running just QC
-workflow RUN_QC_ONLY {
-    log.info """
-    ===========================================
-    Running QC-only workflow
-    ===========================================
-    VCF Files: ${params.vcf_files}
-    Sample Set: ${params.sampleset}
-    Output: ${params.outdir}/${params.sampleset}/qc/
-    ===========================================
-    """
-
-    // Run QC workflow
-    QC()
-    
-    log.info """
-    ===========================================
-    QC Complete! 
-    Output samplesheet: ${params.outdir}/${params.sampleset}/qc/${params.sampleset}_pgscalc_samplesheet.csv
-    ===========================================
-    """
-}
+// RUN_QC_ONLY removed: using direct VCF->PGEN conversion path
 
 
 /*

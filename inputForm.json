@@ -25,6 +25,13 @@
         "dataFilter": {
           "dataType": "file"
         },
+      {
+        "id": "target_scores_report",
+        "label": "Subset PGS IDs for additional report",
+        "helpText": "Optional: comma-separated PGS IDs to produce an additional subset report and CSV (e.g., PGS000802,PGS000001). Leave empty to skip.",
+        "type": "textbox",
+        "value": ""
+      },
         "maxValues": 10,
         "minValues": 1
         
