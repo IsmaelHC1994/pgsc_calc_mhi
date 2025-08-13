@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    pgscatalog/pgsc_calc (fork - MHI (QC+REPORT))
+    pgscatalog/pgsc_calc (fork - MHI (SKIP QC VERSION))
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     Github : 
     Docs   : 
@@ -16,26 +16,13 @@ nextflow.enable.dsl = 2
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-// Import conversion module (VCF -> PLINK2 pgen)
-include { PLINK2_VCF } from './modules/local/plink2_vcf'
-
 include { PGSCCALC } from './workflows/pgsc_calc'
+
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     VALIDATE & PRINT PARAMETER SUMMARY
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
-
-// include { paramsHelp } from 'plugin/nf-schema'
-
-// // Print help message if needed
-// if (params.help) {
-//     log.info paramsHelp("nextflow run pgscatalog/pgsc_calc --input input_file.csv")
-//     log.info "See https://pgsc-calc.readthedocs.io/en/latest/getting-started.html for more help"
-//     exit 0
-// }
-
-// WorkflowMain.initialise(workflow, params, log, args)
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -63,7 +50,7 @@ process COLLECT_SCOREFILES {
 process GENERATE_REPORTS {
     label 'process_low'
     container = 'docker.io/ismaelhc94/pgsc-mhi-report'
-    publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
+    publishDir "${params.outdir}/${params.sampleset}/reports", mode: 'symlink'
     
     input:
     path(result_files)
@@ -72,9 +59,6 @@ process GENERATE_REPORTS {
     
     output:
     path "patient*.html"
-    path "patient_summaries.csv"
-    path "subset/patient*subset_report.html", optional: true
-    path "subset/pgs_subset.csv", optional: true
     
     script:
     def font_setup = fontawesome_font.name != 'NO_FILE' ? 
@@ -93,9 +77,6 @@ process GENERATE_REPORTS {
     # Copy the provided template to work directory with a new name
     cp ${report_template} working_patient_report_template.qmd
     
-    # Expose optional subset scores to R
-    export SUBSET_SCORES='${params.target_scores_report ?: ''}'
-
     # Run R script directly
     Rscript --vanilla -e "
     library(tidyverse)
@@ -159,62 +140,6 @@ process GENERATE_REPORTS {
         execute_params = list(patient_id = pid)
       )
     }
-
-    # Optional: subset report generation if SUBSET_SCORES provided
-    subset_arg <- Sys.getenv('SUBSET_SCORES')
-    if (nzchar(subset_arg)) {
-      message('Subset scores requested: ', subset_arg)
-      subset_vec <- strsplit(subset_arg, ',')[[1]] |> trimws()
-      pgs_path <- list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]
-      pop_path <- list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]
-      scores_all <- read_tsv(gzfile(pgs_path))
-      scores_sub <- dplyr::filter(scores_all, PGS %in% subset_vec)
-      if (nrow(scores_sub) == 0) {
-        warning('No rows found for requested subset scores; skipping subset report')
-      } else {
-        dir.create('subset', showWarnings = FALSE)
-        pop_all <- read_tsv(gzfile(pop_path))
-        # Reuse existing pipeline on the filtered scores
-        scores_popsim_sub <- scores_sub %>%
-          dplyr::left_join(pop_all %>% dplyr::select(IID, MostSimilarPop), by = 'IID') %>%
-          dplyr::mutate(simple_id = stringr::str_extract(IID, '[^_]+\\\$'))
-        run_patient_data_sub <- scores_popsim_sub %>%
-          dplyr::filter(sampleset != 'reference') %>%
-          dplyr::mutate(Overall_Percentile = round(dplyr::percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
-          dplyr::group_by(MostSimilarPop) %>%
-          dplyr::mutate(Population_Percentile = round(dplyr::percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
-          dplyr::ungroup()
-        # Write subset artifacts for publishing
-        readr::write_tsv(scores_sub, gzfile('subset/pgs.txt.gz'))
-        readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
-        readr::write_csv(scores_sub, 'subset/pgs_subset.csv')
-        # Save subset patient summaries
-        subset_summary_file <- file.path('subset', 'patient_summaries.csv')
-        subset_text_data <- run_patient_data_sub %>%
-          dplyr::mutate(
-            Summary = sprintf(
-              'Patient: %s, Score: %s, Overall Percentile: %.1f%%',
-              IID,
-              Z_MostSimilarPop,
-              Overall_Percentile
-            )
-          )
-        writeLines(subset_text_data\\\$Summary, subset_summary_file)
-        file.copy('working_patient_report_template.qmd', 'subset/working_patient_report_template.qmd', overwrite = TRUE)
-        # derive patient IDs from subset run (exclude HG00 references)
-        ids <- run_patient_data_sub %>%
-          dplyr::filter(!grepl('^HG00', IID)) %>%
-          dplyr::pull(simple_id) %>%
-          unique()
-        if (length(ids) > 0) {
-          owd <- getwd(); setwd('subset'); on.exit(setwd(owd), add = TRUE)
-          for (pid in ids) {
-            message(sprintf('Generating subset reports for patient %s...', pid))
-            quarto::quarto_render('working_patient_report_template.qmd', output_file = paste0('patient_', pid, '_subset_report.html'), execute_params = list(patient_id = pid))
-          }
-        }
-      }
-    }
     "
     """
 }
@@ -225,11 +150,11 @@ process GENERATE_REPORTS {
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-// Main workflow that runs both QC and PGSC_CALC in sequence
+// Main workflow that skips QC and goes directly to PGSC_CALC
 workflow {
     log.info """
     ===========================================
-    Complete PGSC_CALC pipeline with QC 
+    PGSC_CALC pipeline (SKIP QC VERSION)
     ===========================================
     VCF Files: ${params.vcf_files}
     Sample Set: ${params.sampleset}
@@ -268,29 +193,26 @@ workflow {
               "  - scorefile (individual scoring file path)"
     }
     
-    // Step 1: Convert VCF to PLINK2 pgen using upstream module (no samplesheet)
-    ch_vcf = Channel
+    // Create VCF input channel for PGSCCALC
+    ch_vcf_input = Channel
         .fromPath(params.vcf_files)
-        .map { vcf_file ->
-            def meta = [ id: params.sampleset, chrom: 'ALL', build: (params.target_build ?: 'GRCh38') ]
-            [ meta, file(vcf_file) ]
+        .map { vcf_file -> 
+            def meta = [id: params.sampleset]
+            [ meta, vcf_file ]
         }
-
-    PLINK2_VCF(ch_vcf)
-
-    // Step 2: Build genotype tuple for PGSCCALC
-    ch_geno_data = PLINK2_VCF.out.pgen
-        .join(PLINK2_VCF.out.psam)
-        .join(PLINK2_VCF.out.pvar)
-        .map { meta, pgen, psam, pvar -> [meta, pgen, psam, pvar] }
+    
+    // Debug output for VCF input
+    ch_vcf_input.view { meta, vcf_file ->
+        "ch_vcf_input: meta=${meta}, vcf_file=${vcf_file}"
+    }
     
     // log the ch_collected_scorefiles
     ch_collected_scorefiles.view { scorefile ->
         "ch_collected_scorefiles: scorefile=${scorefile}"
     }
     
-    // Pass null for samplesheet since we're using direct genotype data
-    PGSCCALC(Channel.value(null), ch_collected_scorefiles, ch_geno_data)
+    // Pass VCF files directly to PGSCCALC (let it handle VCF conversion internally)
+    PGSCCALC(Channel.value(null), ch_collected_scorefiles, ch_vcf_input)
     
     // Step 3: Generate reports using both score files and ancestry results from PGSC_CALC
     // Extract just the file paths from the metadata tuples
@@ -305,12 +227,8 @@ workflow {
     
     // Generate reports using all results and the provided template
     GENERATE_REPORTS(all_result_files, file(params.report_template), fontawesome_input)
-
+    
 }
-
-// Add a dedicated workflow for running just QC
-// RUN_QC_ONLY removed: using direct VCF->PGEN conversion path
-
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -319,4 +237,4 @@ workflow {
   _.|o o  |_   ) )
 -(((---(((--------
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
+*/ 
