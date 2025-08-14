@@ -18,7 +18,6 @@ nextflow.enable.dsl = 2
 
 // Import conversion module (VCF -> PLINK2 pgen)
 include { PLINK2_VCF } from './modules/local/plink2_vcf'
-
 include { PGSCCALC } from './workflows/pgsc_calc'
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -227,19 +226,6 @@ process GENERATE_REPORTS {
 
 // Main workflow that runs both QC and PGSC_CALC in sequence
 workflow {
-    log.info """
-    ===========================================
-    Complete PGSC_CALC pipeline with QC 
-    ===========================================
-    VCF Files: ${params.vcf_files}
-    Sample Set: ${params.sampleset}
-    Scorefile Folder: ${params.scorefile_folder}
-    PGS IDs: ${params.pgs_id ?: 'None'}
-    PGP IDs: ${params.pgp_id ?: 'None'}
-    EFO IDs: ${params.efo_id ?: 'None'}
-    Report Template: ${params.report_template}
-    ===========================================
-    """
     
     // Handle scorefile folder input if provided
     ch_collected_scorefiles = Channel.empty()
