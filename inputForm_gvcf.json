@@ -1,0 +1,176 @@
+{
+  "fields": [
+    {
+      "id": "section_input_type",
+      "label": "Input Type Selection",
+      "helpText": "Choose whether to process gVCF files or use pre-processed VCF files",
+      "type": "section"
+    },
+    {
+      "id": "input_type",
+      "label": "Input Type",
+      "helpText": "Select 'gVCF' to process raw gVCF files, or 'VCF' to use pre-processed VCF files",
+      "type": "dropdown",
+      "options": [
+        {"label": "VCF (Pre-processed)", "value": "vcf"},
+        {"label": "gVCF (Raw)", "value": "gvcf"}
+      ],
+      "value": "vcf"
+    },
+    {
+      "id": "section_gvcf_inputs",
+      "label": "gVCF Processing Options",
+      "helpText": "Required when processing gVCF files",
+      "type": "section",
+      "condition": {
+        "field": "input_type",
+        "value": "gvcf"
+      }
+    },
+    {
+      "id": "gvcf_files",
+      "label": "gVCF Files",
+      "helpText": "gVCF files to process (e.g., .hard-filtered.gvcf.gz files)",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 10,
+      "minValues": 1,
+      "condition": {
+        "field": "input_type",
+        "value": "gvcf"
+      }
+    },
+    {
+      "id": "reference_db",
+      "label": "Reference Database Archive",
+      "helpText": "PLINK archive containing HGDP+1kGP reference variants (tar.zst format)",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 1,
+      "condition": {
+        "field": "input_type",
+        "value": "gvcf"
+      }
+    },
+    {
+      "id": "reference_genome",
+      "label": "Reference Genome (FASTA)",
+      "helpText": "FASTA reference genome for hg38 with index present",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 1,
+      "condition": {
+        "field": "input_type",
+        "value": "gvcf"
+      }
+    },
+    {
+      "id": "section_vcf_inputs",
+      "label": "VCF Input Options",
+      "helpText": "Required when using pre-processed VCF files",
+      "type": "section",
+      "condition": {
+        "field": "input_type",
+        "value": "vcf"
+      }
+    },
+    {
+      "id": "vcf_files",
+      "label": "VCF Files",
+      "helpText": "Pre-processed VCF files for PGS calculation",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 10,
+      "minValues": 1,
+      "condition": {
+        "field": "input_type",
+        "value": "vcf"
+      }
+    },
+    {
+      "id": "section_common_options",
+      "label": "Common Options",
+      "helpText": "Options used regardless of input type",
+      "type": "section"
+    },
+    {
+      "id": "sampleset",
+      "label": "Sample Set Name",
+      "helpText": "Name identifier for this sample set (e.g., 'brugada', 'cohort1')",
+      "type": "textbox",
+      "value": ""
+    },
+    {
+      "id": "section_scorefiles",
+      "label": "Scoring File Options",
+      "helpText": "Choose ONE method to provide scoring files",
+      "type": "section"
+    },
+    {
+      "id": "scorefile_folder",
+      "label": "Scorefile Tar File (Upload)",
+      "helpText": "Tar file containing one or more scoring files in PGS Catalog format",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 0
+    },
+    {
+      "id": "pgs_id",
+      "label": "PGS Score IDs (Download)",
+      "helpText": "Comma-separated list of PGS score IDs to download from PGS Catalog",
+      "type": "textbox",
+      "value": ""
+    },
+    {
+      "id": "pgp_id",
+      "label": "PGS Publication IDs (Download)",
+      "helpText": "Comma-separated list of PGS Catalog publication IDs to download",
+      "type": "textbox",
+      "value": ""
+    },
+    {
+      "id": "efo_id",
+      "label": "EFO Trait IDs (Download)",
+      "helpText": "Comma-separated list of PGS Catalog EFO trait IDs to download",
+      "type": "textbox",
+      "value": ""
+    },
+    {
+      "id": "section_report_options",
+      "label": "Report Generation Options",
+      "helpText": "Configure patient report generation",
+      "type": "section"
+    },
+    {
+      "id": "report_template",
+      "label": "Patient Report Template",
+      "helpText": "Quarto template file (.qmd) for generating patient reports",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 1
+    },
+    {
+      "id": "target_scores_report",
+      "label": "Subset PGS IDs for Additional Report",
+      "helpText": "Optional: comma-separated PGS IDs to produce an additional subset report",
+      "type": "textbox",
+      "value": ""
+    }
+  ]
+}
