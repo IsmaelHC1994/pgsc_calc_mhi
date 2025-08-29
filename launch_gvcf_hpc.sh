@@ -1,5 +1,4 @@
 #! /bin/bash
-# Enhanced pgscalc Pipeline with gVCF Processing - HPC Launcher
 # this is recommended by the developers to add to the .sh 
 export NXF_ANSI_LOG=false
 export NXF_OPTS="-Xms500M -Xmx2G"
@@ -17,7 +16,7 @@ module load apptainer
 nextflow run main_with_gvcf.nf \
     -c nextflow.config \
     -c nextflow_gvcf.config \
-    -profile apptainer,narval,gvcf \
+    -profile apptainer,narval \
     --input_type gvcf \
     --sampleset gvcfTest \
     --gvcf_files "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/24-1550i.hard-filtered.gvcf.gz" \
