@@ -218,11 +218,11 @@ workflow {
     log.info "Processing gVCF files..."
     
     // Create channels for gVCF processing
-    ch_reference_db = Channel.fromPath(params.reference_db)
+    ch_reference_db = Channel.fromPath(params.run_ancestry)
     ch_gvcf_files = Channel.fromPath(params.gvcf_files)
     ch_reference_genome = Channel.fromPath(params.reference_genome)
     
-    log.info "Reference DB: ${params.reference_db}"
+    log.info "Reference DB: ${params.run_ancestry}"
     log.info "gVCF Files: ${params.gvcf_files}"
     log.info "Reference Genome: ${params.reference_genome}"
     

@@ -1,33 +1,6 @@
 {
   "fields": [
     {
-      "id": "section_input_type",
-      "label": "Input Type Selection",
-      "helpText": "Choose whether to process gVCF files or use pre-processed VCF files",
-      "type": "section"
-    },
-    {
-      "id": "input_type",
-      "label": "Input Type",
-      "helpText": "Select 'gVCF' to process raw gVCF files, or 'VCF' to use pre-processed VCF files",
-      "type": "dropdown",
-      "options": [
-        {"label": "VCF (Pre-processed)", "value": "vcf"},
-        {"label": "gVCF (Raw)", "value": "gvcf"}
-      ],
-      "value": "vcf"
-    },
-    {
-      "id": "section_gvcf_inputs",
-      "label": "gVCF Processing Options",
-      "helpText": "Required when processing gVCF files",
-      "type": "section",
-      "condition": {
-        "field": "input_type",
-        "value": "gvcf"
-      }
-    },
-    {
       "id": "gvcf_files",
       "label": "gVCF Files",
       "helpText": "gVCF files to process (e.g., .hard-filtered.gvcf.gz files)",
@@ -36,27 +9,9 @@
         "dataType": "file"
       },
       "maxValues": 10,
-      "minValues": 1,
-      "condition": {
-        "field": "input_type",
-        "value": "gvcf"
-      }
-    },
-    {
-      "id": "reference_db",
-      "label": "Reference Database Archive",
-      "helpText": "PLINK archive containing HGDP+1kGP reference variants (tar.zst format)",
-      "type": "data",
-      "dataFilter": {
-        "dataType": "file"
-      },
-      "maxValues": 1,
-      "minValues": 1,
-      "condition": {
-        "field": "input_type",
-        "value": "gvcf"
-      }
-    },
+      "minValues": 1
+     },
+
     {
       "id": "reference_genome",
       "label": "Reference Genome (FASTA)",
@@ -66,36 +21,7 @@
         "dataType": "file"
       },
       "maxValues": 1,
-      "minValues": 1,
-      "condition": {
-        "field": "input_type",
-        "value": "gvcf"
-      }
-    },
-    {
-      "id": "section_vcf_inputs",
-      "label": "VCF Input Options",
-      "helpText": "Required when using pre-processed VCF files",
-      "type": "section",
-      "condition": {
-        "field": "input_type",
-        "value": "vcf"
-      }
-    },
-    {
-      "id": "vcf_files",
-      "label": "VCF Files",
-      "helpText": "Pre-processed VCF files for PGS calculation",
-      "type": "data",
-      "dataFilter": {
-        "dataType": "file"
-      },
-      "maxValues": 10,
-      "minValues": 1,
-      "condition": {
-        "field": "input_type",
-        "value": "vcf"
-      }
+      "minValues": 1
     },
     {
       "id": "section_common_options",
@@ -113,13 +39,13 @@
     {
       "id": "section_scorefiles",
       "label": "Scoring File Options",
-      "helpText": "Choose ONE method to provide scoring files",
+      "helpText": "Choose ONE of the following methods to provide scoring files: upload a tar file with 1 or more scoring files (manually edited in pgscalc-format), or specify PGS Catalog IDs to download. If a target, focused report is desired in addition to the overall one, you must specify the 'Subset PGS IDs for additional report' section below.",
       "type": "section"
     },
     {
       "id": "scorefile_folder",
       "label": "Scorefile Tar File (Upload)",
-      "helpText": "Tar file containing one or more scoring files in PGS Catalog format",
+      "helpText": "Tar file containing one or more scoring files in PGS Catalog format. Alternative to using PGS Catalog IDs below.",
       "type": "data",
       "dataFilter": {
         "dataType": "file"
@@ -130,29 +56,16 @@
     {
       "id": "pgs_id",
       "label": "PGS Score IDs (Download)",
-      "helpText": "Comma-separated list of PGS score IDs to download from PGS Catalog",
+      "helpText": "Comma-separated list of PGS score IDs to download from PGS Catalog, e.g. PGS000802,PGS000001. Alternative to uploading scorefile folder above.",
       "type": "textbox",
       "value": ""
     },
     {
-      "id": "pgp_id",
-      "label": "PGS Publication IDs (Download)",
-      "helpText": "Comma-separated list of PGS Catalog publication IDs to download",
+      "id": "target_scores_report",
+      "label": "Subset PGS IDs for additional report",
+      "helpText": "Optional: comma-separated PGS IDs to produce an additional subset report and CSV (e.g., PGS000802,PGS000001). If a manual tar file is supplied, the score labels passed here must match the metadata in the tar file. Leave empty to skip.",
       "type": "textbox",
       "value": ""
-    },
-    {
-      "id": "efo_id",
-      "label": "EFO Trait IDs (Download)",
-      "helpText": "Comma-separated list of PGS Catalog EFO trait IDs to download",
-      "type": "textbox",
-      "value": ""
-    },
-    {
-      "id": "section_report_options",
-      "label": "Report Generation Options",
-      "helpText": "Configure patient report generation",
-      "type": "section"
     },
     {
       "id": "report_template",
@@ -166,9 +79,255 @@
       "minValues": 1
     },
     {
-      "id": "target_scores_report",
-      "label": "Subset PGS IDs for Additional Report",
-      "helpText": "Optional: comma-separated PGS IDs to produce an additional subset report",
+      "id": "fontawesome_font",
+      "label": "FontAwesome Font File",
+      "helpText": "Optional FontAwesome font file (.ttf) for displaying person icons in reports. If not provided, circles will be used instead.",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 0
+    },
+    {
+      "id": "outdir",
+      "label": "outdir",
+      "helpText": "The output directory where the results will be saved. You have to use absolute paths to storage on Cloud infrastructure.",
+      "type": "textbox",
+      "value": "out",
+      "hidden": true
+    },
+    {
+      "id": "copy_genomes",
+      "label": "copy_genomes",
+      "type": "checkbox",
+      "helpText": "Copy harmonised genomes (plink2 pgen/pvar/psam files) to outdir"
+    },
+    {
+      "id": "section_compatibilityoptions",
+      "label": "Compatibility options",
+      "helpText": "Define parameters that control how scoring files and target genomes are made compatible with each other",
+      "type": "section"
+    },
+    {
+      "id": "target_build",
+      "label": "target_build",
+      "helpText": "Genome build of target genomes, eg. GRCh38",
+      "type": "textbox",
+      "value": ""
+    },
+    {
+      "id": "liftover",
+      "label": "liftover",
+      "type": "checkbox",
+      "helpText": "Lift scoring files to match your target genomes. Requires build information in the header of the scoring files."
+    },
+    {
+      "id": "min_lift",
+      "label": "min_lift",
+      "helpText": "Minimum proportion of variants required to successfully remap a scoring file to a different genome build.",
+      "type": "number",
+      "value": 0.95
+    },
+    {
+      "id": "section_matchingoptions",
+      "label": "Matching options",
+      "helpText": "Define how variants are matched across scoring files and target genomes.",
+      "type": "section"
+    },
+    {
+      "id": "keep_multiallelic",
+      "label": "keep_multiallelic",
+      "type": "checkbox",
+      "helpText": "Allow matches of scoring file variants to multiallelic variants in the target dataset"
+    },
+    {
+      "id": "keep_ambiguous",
+      "label": "keep_ambiguous",
+      "type": "checkbox",
+      "helpText": "Keep matches of scoring file variants to strand ambiguous variants (e.g. A/T and C/G SNPs) in the target dataset. This assumes the scoring file and target dataset report variants on the same strand."
+    },
+    {
+      "id": "min_overlap",
+      "label": "min_overlap",
+      "helpText": "Minimum proportion of variants present in both the score file and input target genomic data",
+      "type": "number",
+      "value": 0.75
+    },
+    {
+      "id": "section_geneticancestryoptions",
+      "label": "Genetic ancestry options",
+      "helpText": "Parameters used to control genetic ancestry similarity analysis on TARGET samples and variants included in PCA",
+      "type": "section"
+    },
+    {
+      "id": "projection_method",
+      "label": "projection_method",
+      "helpText": "The method for PCA prediction. oadp: most accurate. adp: accurate but slow. sp: fast but inaccurate.",
+      "type": "textbox",
+      "value": "oadp"
+    },
+    {
+      "id": "ancestry_method",
+      "label": "ancestry_method",
+      "helpText": "Method used for population/ancestry assignment",
+      "type": "textbox",
+      "value": "RandomForest"
+    },
+    {
+      "id": "ref_label",
+      "label": "ref_label",
+      "helpText": "Population labels in reference psam to use for assignment",
+      "type": "textbox",
+      "value": "SuperPop"
+    },
+    {
+      "id": "n_popcomp",
+      "label": "n_popcomp",
+      "helpText": "Number of PCs used for population assignment",
+      "type": "integer",
+      "value": 5
+    },
+    {
+      "id": "normalization_method",
+      "label": "normalization_method",
+      "helpText": "Method used for normalisation of genetic ancestry",
+      "type": "textbox",
+      "value": "empirical mean mean+var"
+    },
+    {
+      "id": "n_normalization",
+      "label": "n_normalization",
+      "helpText": "Number of PCs used for population normalisation",
+      "type": "integer",
+      "value": 4
+    },
+    {
+      "id": "load_afreq",
+      "label": "load_afreq",
+      "type": "checkbox",
+      "helpText": "Load allelic frequencies from reference panel when scoring target genomes"
+    },
+    {
+      "id": "pca_maf_target",
+      "label": "pca_maf_target",
+      "helpText": "Minimum MAF threshold in TARGET samples for variants to be included in the PCA.",
+      "type": "number"
+    },
+    {
+      "id": "pca_geno_miss_target",
+      "label": "pca_geno_miss_target",
+      "helpText": "Maximum genotype missingness threshold in TARGET samples for variants to be included in the PCA.",
+      "type": "number",
+      "value": 0.1
+    },
+    {
+      "id": "section_referenceoptions",
+      "label": "Reference options",
+      "helpText": "Define how genomes and variants in REFERENCE panel are defined and processed for PCA",
+      "type": "section"
+    },
+    {
+      "id": "run_ancestry",
+      "label": "run_ancestry",
+      "helpText": "Path to reference database. Must be set to adjust for genetic ancestry differences between the scoring file and target genomes.",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 1
+    },
+    {
+      "id": "hg19_chain",
+      "label": "hg19_chain",
+      "helpText": "Path to a UCSC chain file for converting from hg19 to hg38.  Needed if lifting over a custom scoring file.",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 0
+    },
+    {
+      "id": "hg38_chain",
+      "label": "hg38_chain",
+      "helpText": "Path to a UCSC chain file for converting from hg38 to hg19.  Needed if lifting over a custom scoring file.",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 0
+    },
+    {
+      "id": "geno_ref",
+      "label": "geno_ref",
+      "helpText": "Exclude VARIANTS with percentage of missing genotype calls greater than a threshold (in reference genomes)",
+      "type": "number",
+      "value": 0.1
+    },
+    {
+      "id": "mind_ref",
+      "label": "mind_ref",
+      "helpText": "Exclude SAMPLES with percentage of missing genotype calls greater than a threshold (in reference genomes)",
+      "type": "number",
+      "value": 0.1
+    },
+    {
+      "id": "maf_ref",
+      "label": "maf_ref",
+      "helpText": "Exclude variants with minor allele frequency (MAF) lower than a threshold (in reference genomes)",
+      "type": "number",
+      "value": 0.05
+    },
+    {
+      "id": "hwe_ref",
+      "label": "hwe_ref",
+      "helpText": "Exclude variants with Hardy-Weinberg equilibrium exact test p-values below  a threshold (in reference genomes)",
+      "type": "number",
+      "value": 0.0001
+    },
+    {
+      "id": "indep_pairwise_ref",
+      "label": "indep_pairwise_ref",
+      "helpText": "Used to generate a list of variants in approximate linkage equilibrium in reference genomes. Window size - step size - unphased hardcall r^2 threshold.",
+      "type": "textbox",
+      "value": "1000 50 0.05"
+    },
+    {
+      "id": "ld_grch37",
+      "label": "ld_grch37",
+      "helpText": "Path to a file that contains areas of high linkage disequilibrium in the reference data (build GRCh37).",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 0
+    },
+    {
+      "id": "ld_grch38",
+      "label": "ld_grch38",
+      "helpText": "Path to a file that contains areas of high linkage disequilibrium in the reference data (build GRCh38).",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 0
+    },
+    {
+      "id": "ref_format_version",
+      "label": "ref_format_version",
+      "helpText": "Version of the default reference database",
+      "type": "textbox",
+      "value": "v0.1"
+    },
+    {
+      "id": "ancestry_checksums",
+      "label": "ancestry_checksums",
+      "helpText": "Used to validate files in the reference database when built",
       "type": "textbox",
       "value": ""
     }
