@@ -167,7 +167,10 @@ process GENERATE_REPORTS {
       pgs_path <- list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]
       pop_path <- list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]
       scores_all <- read_tsv(gzfile(pgs_path))
-      scores_sub <- dplyr::filter(scores_all, PGS %in% subset_vec)
+      # Extract base PGS ID from full PGS column (e.g., PGS000016_hmPOS_GRCh38 -> PGS000016)
+      scores_all_with_base <- scores_all %>%
+        dplyr::mutate(PGS_base = stringr::str_extract(PGS, '^[^_]+'))
+      scores_sub <- dplyr::filter(scores_all_with_base, PGS_base %in% subset_vec, sampleset != 'reference')
       if (nrow(scores_sub) == 0) {
         warning('No rows found for requested subset scores; skipping subset report')
       } else {
