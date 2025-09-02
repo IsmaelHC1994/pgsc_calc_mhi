@@ -9,7 +9,11 @@
     {
       "id": "sampleset",
       "label": "Sample Set Name",
+<<<<<<< HEAD
       "helpText": "Name identifier for this sample set (e.g., 'brugada', 'cohort1')",
+=======
+      "helpText": "Name identifier for this sample set (e.g., 'brugada', 'cohort1'). MUST not contain spaces or special characters (eg. _).",
+>>>>>>> origin/dev-mhi-ica
       "type": "textbox",
       "value": ""
     },
