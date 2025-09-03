@@ -160,7 +160,7 @@ process GENERATE_REPORTS {
       # Extract base PGS ID from full PGS column (e.g., PGS000016_hmPOS_GRCh38 -> PGS000016)
       scores_all_with_base <- scores_all %>%
         dplyr::mutate(PGS_base = stringr::str_extract(PGS, '^[^_]+'))
-      scores_sub <- dplyr::filter(scores_all_with_base, PGS_base %in% subset_vec, sampleset != 'reference')
+      scores_sub <- dplyr::filter(scores_all_with_base, PGS_base %in% subset_vec)
       if (nrow(scores_sub) == 0) {
         warning('No rows found for requested subset scores; skipping subset report')
       } else {
@@ -192,6 +192,7 @@ process GENERATE_REPORTS {
             )
           )
         writeLines(subset_text_data\\\$Summary, subset_summary_file)
+        file.copy('fontawesome-webfont.ttf', 'subset/fontawesome-webfont.ttf', overwrite = TRUE)
         file.copy('working_patient_report_template.qmd', 'subset/working_patient_report_template.qmd', overwrite = TRUE)
         # derive patient IDs from subset run (exclude HG00 references)
         ids <- run_patient_data_sub %>%
@@ -284,12 +285,13 @@ workflow {
               "  - scorefile (individual scoring file path)"
     }
     
-         // Step 1: Convert VCF to PLINK2 pgen using upstream module (no samplesheet)
+     // Step 1: Convert VCF to PLINK2 pgen using upstream module (no samplesheet)
      // Use the processed VCFs from the gVCF pipeline
-     ch_vcf = ch_vcf_for_pgscalc.map { vcf_file ->
+     // Create metadata exactly like the original main.nf
+     ch_vcf_for_pgscalc.map { vcf_file ->
          def meta = [ id: params.sampleset, chrom: 'ALL', build: (params.target_build ?: 'GRCh38') ]
          [ meta, file(vcf_file) ]
-     }
+     }.set { ch_vcf }
 
      PLINK2_VCF(ch_vcf)
 
