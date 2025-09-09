@@ -16,14 +16,7 @@ nextflow.enable.dsl = 2
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-// Import gVCF processing modules
-include { PREPARE_REFERENCE_VCF } from './modules/local/gvcf/prepare_reference_vcf'
-include { CONVERT_GVCF_TO_VCF } from './modules/local/gvcf/convert_gvcf_to_vcf'
-include { MERGE_WITH_REFERENCE } from './modules/local/gvcf/merge_with_reference'
-include { FINAL_CLEANUP } from './modules/local/gvcf/final_cleanup'
-
 // Import existing pgscalc modules
-include { PLINK2_VCF } from './modules/local/plink2_vcf'
 include { PGSCCALC } from './workflows/pgsc_calc'
 
 /*
@@ -158,8 +151,13 @@ process GENERATE_REPORTS {
       pop_path <- list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]
       scores_all <- read_tsv(gzfile(pgs_path))
       # Extract base PGS ID from full PGS column (e.g., PGS000016_hmPOS_GRCh38 -> PGS000016)
+      # For custom scores like brugadaMTAGnoOverlap, extract the base name before 'noOverlap'
       scores_all_with_base <- scores_all %>%
-        dplyr::mutate(PGS_base = stringr::str_extract(PGS, '^[^_]+'))
+        dplyr::mutate(PGS_base = dplyr::case_when(
+          stringr::str_detect(PGS, '^PGS[0-9]+') ~ stringr::str_extract(PGS, '^[^_]+'),
+          stringr::str_detect(PGS, 'noOverlap\\\$') ~ stringr::str_remove(PGS, 'noOverlap\\\$'),
+          TRUE ~ PGS
+        ))
       scores_sub <- dplyr::filter(scores_all_with_base, PGS_base %in% subset_vec)
       if (nrow(scores_sub) == 0) {
         warning('No rows found for requested subset scores; skipping subset report')
@@ -192,8 +190,16 @@ process GENERATE_REPORTS {
             )
           )
         writeLines(subset_text_data\\\$Summary, subset_summary_file)
-        file.copy('fontawesome-webfont.ttf', 'subset/fontawesome-webfont.ttf', overwrite = TRUE)
+        
+        # Copy FontAwesome font and template to subset folder
+        if (file.exists('fontawesome-webfont.ttf')) {
+          file.copy('fontawesome-webfont.ttf', 'subset/fontawesome-webfont.ttf', overwrite = TRUE)
+          message('FontAwesome font copied to subset folder')
+        } else {
+          warning('FontAwesome font not found, subset reports may not display icons correctly')
+        }
         file.copy('working_patient_report_template.qmd', 'subset/working_patient_report_template.qmd', overwrite = TRUE)
+        
         # derive patient IDs from subset run (exclude HG00 references)
         ids <- run_patient_data_sub %>%
           dplyr::filter(!grepl('^HG00', IID)) %>%
@@ -219,44 +225,7 @@ process GENERATE_REPORTS {
 */
 
 workflow {
-    log.info "Processing gVCF files..."
-    
-    // Create channels for gVCF processing
-    ch_reference_db = Channel.fromPath(params.run_ancestry)
-    ch_gvcf_files = Channel.fromPath(params.gvcf_files)
-    ch_reference_genome = Channel.fromPath(params.reference_genome)
-    
-    log.info "Reference DB: ${params.run_ancestry}"
-    log.info "gVCF Files: ${params.gvcf_files}"
-    log.info "Reference Genome: ${params.reference_genome}"
-    
-    // Step 1: Prepare reference VCF with null_sample
-    PREPARE_REFERENCE_VCF(ch_reference_db)
-    
-    // Step 2: Convert gVCF to VCF with proper formatting
-    CONVERT_GVCF_TO_VCF(
-        ch_gvcf_files,
-        ch_reference_genome,
-        PREPARE_REFERENCE_VCF.out.reference_vcf,
-        PREPARE_REFERENCE_VCF.out.reference_vcf_index
-    )
-    
-    // Step 3: Merge with reference to fill missing variants
-    MERGE_WITH_REFERENCE(
-        CONVERT_GVCF_TO_VCF.out.processed_vcf,
-        CONVERT_GVCF_TO_VCF.out.processed_vcf_index,
-        PREPARE_REFERENCE_VCF.out.reference_vcf,
-        PREPARE_REFERENCE_VCF.out.reference_vcf_index
-    )
-    
-    // Step 4: Final cleanup - fix malformed GT fields and filter variants
-    FINAL_CLEANUP(
-        MERGE_WITH_REFERENCE.out.final_vcf,
-        MERGE_WITH_REFERENCE.out.final_vcf_index
-    )
-    
-    // Use the processed VCFs for pgscalc
-    ch_vcf_for_pgscalc = FINAL_CLEANUP.out.final_vcf
+    log.info "Starting PGSC_CALC with gVCF processing..."
     
     // Handle scorefile folder input if provided
     ch_collected_scorefiles = Channel.empty()
@@ -285,29 +254,13 @@ workflow {
               "  - scorefile (individual scoring file path)"
     }
     
-     // Step 1: Convert VCF to PLINK2 pgen using upstream module (no samplesheet)
-     // Use the processed VCFs from the gVCF pipeline
-     // Create metadata exactly like the original main.nf
-     ch_vcf_for_pgscalc.map { vcf_file ->
-         def meta = [ id: params.sampleset, chrom: 'ALL', build: (params.target_build ?: 'GRCh38') ]
-         [ meta, file(vcf_file) ]
-     }.set { ch_vcf }
-
-     PLINK2_VCF(ch_vcf)
-
-    // Step 2: Build genotype tuple for PGSCCALC
-    ch_geno_data = PLINK2_VCF.out.pgen
-        .join(PLINK2_VCF.out.psam)
-        .join(PLINK2_VCF.out.pvar)
-        .map { meta, pgen, psam, pvar -> [meta, pgen, psam, pvar] }
-    
     // log the ch_collected_scorefiles
     ch_collected_scorefiles.view { scorefile ->
         "ch_collected_scorefiles: scorefile=${scorefile}"
     }
     
-    // Pass null for samplesheet since we're using direct genotype data
-    PGSCCALC(Channel.value(null), ch_collected_scorefiles, ch_geno_data)
+    // Call PGSCCALC with gVCF processing integrated
+    PGSCCALC(ch_collected_scorefiles)
     
     // Step 3: Generate reports using both score files and ancestry results from PGSC_CALC
     // Extract just the file paths from the metadata tuples
