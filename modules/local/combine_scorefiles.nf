@@ -15,19 +15,27 @@ process COMBINE_SCOREFILES {
     path reference
 
     output:
-    path "scorefiles.txt.gz", emit: scorefiles
-    path "log_scorefiles.json", emit: log_scorefiles
-    path "versions.yml"     , emit: versions
+    path "formatted/normalised_*.{txt,txt.gz}", arity: "1..*", emit: scorefiles
+    path "formatted/log_scorefiles.json", arity: "1", emit: log_scorefiles
+    path "versions.yml", arity: "1", emit: versions
 
     script:
     def args = task.ext.args ?: ''
 
     if (params.liftover)
         """
-        pgscatalog-combine -s $raw_scores \
+        mkdir formatted
+
+        SCORES=""
+        for f in $raw_scores; do
+            SCORES="\$SCORES -s \$f"
+        done
+
+        pgscatalog-format \$SCORES \
             --liftover \
+            --threads $task.cpus \
             -t $params.target_build \
-            -o scorefiles.txt.gz \
+            -o formatted/ \
             -l log_scorefiles.json \
             -c \$PWD \
             -m $params.min_lift \
@@ -41,9 +49,17 @@ process COMBINE_SCOREFILES {
         """
     else
         """
-        pgscatalog-combine -s $raw_scores \
+        mkdir formatted
+
+        SCORES=""
+        for f in $raw_scores; do
+            SCORES="\$SCORES -s \$f"
+        done
+
+        pgscatalog-format \$SCORES \
             -t $params.target_build \
-            -o scorefiles.txt.gz \
+            --threads $task.cpus \
+            -o formatted/ \
             -l log_scorefiles.json \
             -v \
             $args
