@@ -6,6 +6,10 @@ process MATCH_COMBINE {
     // first element of tag must be sampleset
     tag "$meta.id"
 
+    // Persist merged match outputs to cache (if provided)
+    cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
+    storeDir cachedir / "match" / "combine"
+
     conda "${task.ext.conda}"
 
     container "${ workflow.containerEngine == 'singularity' &&

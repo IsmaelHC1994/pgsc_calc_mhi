@@ -5,6 +5,10 @@ process SCORE_REPORT {
     label 'process_high_memory'
     label 'report'
 
+    // Persist rendered report outputs to cache (if provided)
+    cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
+    storeDir cachedir / "reports"
+
     conda "${task.ext.conda}"
 
     container "${ workflow.containerEngine == 'singularity' &&
@@ -34,7 +38,8 @@ process SCORE_REPORT {
     run_ancestry = params.run_ancestry ? true : false
     """
     export TMPDIR=\$PWD # tmpdir must always be writable for quarto
-    echo $workflow.commandLine > command.txt
+    # workflow.commandLine is volatile and can break caching; omit from outputs
+    echo "PGSC_CALC report generation" > command.txt
     
     echo "keep_multiallelic: $params.keep_multiallelic" > params.txt
     echo "keep_ambiguous   : $params.keep_ambiguous"    >> params.txt

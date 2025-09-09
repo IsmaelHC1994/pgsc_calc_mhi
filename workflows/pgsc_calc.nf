@@ -130,6 +130,13 @@ if (params.parallel) {
 include { DOWNLOAD_SCOREFILES  } from '../modules/local/download_scorefiles'
 // mhi-qc:
 include { COMBINE_SCOREFILES   } from '../modules/local/combine_scorefiles'
+include { PLINK2_VCF } from '../modules/local/plink2_vcf'
+
+// Import gVCF processing modules
+include { PREPARE_REFERENCE_VCF } from '../modules/local/gvcf/prepare_reference_vcf'
+include { CONVERT_GVCF_TO_VCF } from '../modules/local/gvcf/convert_gvcf_to_vcf'
+include { MERGE_WITH_REFERENCE } from '../modules/local/gvcf/merge_with_reference'
+include { FINAL_CLEANUP } from '../modules/local/gvcf/final_cleanup'
 
 include { BOOTSTRAP_ANCESTRY   } from '../subworkflows/local/ancestry/bootstrap_ancestry'
 include { INPUT_CHECK          } from '../subworkflows/local/input_check'
@@ -148,30 +155,78 @@ include { DUMPSOFTWAREVERSIONS } from '../modules/local/dumpsoftwareversions'
 
 workflow PGSCCALC {
     take:
-        samplesheet // mhi-qc: Optional samplesheet from MHI-QC workflow
-        scorefiles  // mhi-qc: Optional scorefiles from COLLECT_SCOREFILES process
-        geno_data   // mhi-qc: Optional direct genotype data (pgen, psam, pvar) from QC workflow
+        scorefiles  // Optional scorefiles from COLLECT_SCOREFILES process
         
     main:
         ch_versions = Channel.empty()
         
-        // mhi-qc: determine whether to use direct genotype data or samplesheet approach
-        use_direct_geno = geno_data != null && geno_data.toString() != "NO_FILE"
+        log.info "Processing gVCF files for PGSC_CALC"
         
-        if (use_direct_geno) {
-            log.info "Using direct genotype data from QC workflow (bypassing samplesheet)"
-        } else {
-            // mhi-qc: determine whether to use the QC samplesheet or params.input:
-            ch_input = samplesheet == null || (samplesheet instanceof Object && samplesheet.toString() == "null") ? 
-                Channel.value(params.input) : 
-                samplesheet
-            
-            // mhi-qc: Log input being used
-            ch_input.first().view { input ->
-                log.info "Using input for PGSC_CALC: ${input}"
-                return input
-            }
+        // Create channels for gVCF processing
+        ch_reference_db = Channel.fromPath(params.run_ancestry)
+        ch_gvcf_files = Channel.fromPath(params.gvcf_files)
+        ch_reference_genome = Channel.fromPath(params.reference_genome)
+        
+        log.info "Reference DB: ${params.run_ancestry}"
+        log.info "gVCF Files: ${params.gvcf_files}"
+        log.info "Reference Genome: ${params.reference_genome}"
+        
+        // Step 1: Prepare reference VCF with null_sample
+        PREPARE_REFERENCE_VCF(ch_reference_db)
+        
+        // Step 2: Convert gVCF to VCF with proper formatting
+        CONVERT_GVCF_TO_VCF(
+            ch_gvcf_files,
+            ch_reference_genome,
+            PREPARE_REFERENCE_VCF.out.reference_vcf,
+            PREPARE_REFERENCE_VCF.out.reference_vcf_index
+        )
+        
+        // Step 3: Merge with reference to fill missing variants
+        MERGE_WITH_REFERENCE(
+            CONVERT_GVCF_TO_VCF.out.processed_vcf,
+            CONVERT_GVCF_TO_VCF.out.processed_vcf_index,
+            PREPARE_REFERENCE_VCF.out.reference_vcf,
+            PREPARE_REFERENCE_VCF.out.reference_vcf_index
+        )
+        
+        // Step 4: Final cleanup - fix malformed GT fields and filter variants
+        FINAL_CLEANUP(
+            MERGE_WITH_REFERENCE.out.final_vcf,
+            MERGE_WITH_REFERENCE.out.final_vcf_index
+        )
+        
+        // Convert processed VCF to PLINK2 pgen format
+        ch_vcf_for_pgscalc = FINAL_CLEANUP.out.final_vcf.map { vcf_file ->
+            def meta = [ id: params.sampleset, chrom: 'ALL', build: (params.target_build ?: 'GRCh38') ]
+            [ meta, file(vcf_file) ]
         }
+        
+        PLINK2_VCF(ch_vcf_for_pgscalc)
+        
+        // Build genotype tuple for downstream processing
+        ch_geno_tuple = PLINK2_VCF.out.pgen
+            .join(PLINK2_VCF.out.psam)
+            .join(PLINK2_VCF.out.pvar)
+            .map { meta, pgen, psam, pvar -> 
+                def new_meta = meta.clone()
+                new_meta.is_pfile = true
+                new_meta.chrom = "ALL"
+                new_meta.build = params.target_build ?: "GRCh38"
+                [new_meta, pgen, psam, pvar] 
+            }
+        
+        // Extract individual components from the tuple
+        ch_geno_direct = ch_geno_tuple.map { meta, pgen, psam, pvar -> [meta, pgen] }
+        ch_pheno_direct = ch_geno_tuple.map { meta, pgen, psam, pvar -> [meta, psam] }
+        ch_variants_direct = ch_geno_tuple.map { meta, pgen, psam, pvar -> [meta, pvar] }
+        
+        // Get vmiss and afreq from PLINK2_VCF output
+        ch_vmiss_direct = PLINK2_VCF.out.vmiss
+        ch_afreq_direct = PLINK2_VCF.out.afreq
+        
+        // Create empty VCF channel since we're using plink format
+        ch_vcf_direct = Channel.empty()
         
         // some workflows require an optional input
         // let's make one, and reuse it where possible
@@ -245,95 +300,28 @@ workflow PGSCCALC {
         }
 
         //
-        // SUBWORKFLOW: Validate and stage input files OR use direct genotype data
+        // SUBWORKFLOW: Prepare scorefiles for downstream processes
         //
         
-        if (use_direct_geno) {
-            // mhi-qc: Use direct genotype data from QC workflow
-            log.info "Using direct genotype data, skipping INPUT_CHECK"
-            
-            // Extract genotype data components
-            ch_geno_direct = geno_data.map { meta, pgen, psam, pvar -> 
-                def new_meta = meta.clone()
-                new_meta.is_pfile = true
-                new_meta.chrom = "ALL"
-                new_meta.build = params.target_build ?: "GRCh38"
-                [new_meta, pgen] 
-            }
-            ch_pheno_direct = geno_data.map { meta, pgen, psam, pvar -> 
-                def new_meta = meta.clone()
-                new_meta.is_pfile = true
-                new_meta.chrom = "ALL"
-                new_meta.build = params.target_build ?: "GRCh38"
-                [new_meta, psam] 
-            }
-            ch_variants_direct = geno_data.map { meta, pgen, psam, pvar -> 
-                def new_meta = meta.clone()
-                new_meta.is_pfile = true
-                new_meta.chrom = "ALL"
-                new_meta.build = params.target_build ?: "GRCh38"
-                [new_meta, pvar] 
-            }
-            
-            // Debug: Check if channels have data
-            ch_geno_direct.view { "DEBUG ch_geno_direct: ${it}" }
-            ch_pheno_direct.view { "DEBUG ch_pheno_direct: ${it}" }
-            ch_variants_direct.view { "DEBUG ch_variants_direct: ${it}" }
-            
-            // Create empty VCF channel since we're using plink format
-            ch_vcf_direct = Channel.empty()
-            
-            // Prepare scorefiles for downstream processes - need to run COMBINE_SCOREFILES
-            ch_scorefiles = ch_scores.collect()
-            
-            // Set up chain files for COMBINE_SCOREFILES
-            Channel.fromPath(optional_input).set { chain_files }
-            if (params.hg19_chain && params.hg38_chain) {
-                Channel.fromPath(params.hg19_chain, checkIfExists: true)
-                    .mix(Channel.fromPath(params.hg38_chain, checkIfExists: true))
-                    .collect()
-                    .set { chain_files }
-            }
-            
-            // Run COMBINE_SCOREFILES to process scorefiles and generate log_scorefiles
-            COMBINE_SCOREFILES(ch_scorefiles, chain_files)
-            ch_versions = ch_versions.mix(COMBINE_SCOREFILES.out.versions)
-            
-            // Use COMBINE_SCOREFILES outputs
-            ch_processed_scorefiles = COMBINE_SCOREFILES.out.scorefiles
-            ch_log_scorefiles = COMBINE_SCOREFILES.out.log_scorefiles
-            
-        } else if (run_input_check) {
-            // Original INPUT_CHECK approach
-            // flatten the score channel
-            ch_scorefiles = ch_scores.collect()
-            // chain files are optional input
-            Channel.fromPath(optional_input).set { chain_files }
-            if (params.hg19_chain && params.hg38_chain) {
-                Channel.fromPath(params.hg19_chain, checkIfExists: true)
-                    .mix(Channel.fromPath(params.hg38_chain, checkIfExists: true))
-                    .collect()
-                    .set { chain_files }
-            }
-
-            INPUT_CHECK (
-                // mhi-qc: use the QC samplesheet (ch_input) or params.input (also ch_input):
-                ch_input, // mhi-qc: original was directly from params.input
-                params.format,
-                ch_scorefiles,
-                chain_files
-            )
-            ch_versions = ch_versions.mix(INPUT_CHECK.out.versions)
-            
-            // Use INPUT_CHECK outputs
-            ch_geno_direct = INPUT_CHECK.out.geno
-            ch_pheno_direct = INPUT_CHECK.out.pheno
-            ch_variants_direct = INPUT_CHECK.out.variants
-            ch_vcf_direct = INPUT_CHECK.out.vcf
-            // mhi-qc:
-            ch_processed_scorefiles = INPUT_CHECK.out.scorefiles
-            ch_log_scorefiles = INPUT_CHECK.out.log_scorefiles
+        // Prepare scorefiles for downstream processes - need to run COMBINE_SCOREFILES
+        ch_scorefiles = ch_scores.collect()
+        
+        // Set up chain files for COMBINE_SCOREFILES
+        Channel.fromPath(optional_input).set { chain_files }
+        if (params.hg19_chain && params.hg38_chain) {
+            Channel.fromPath(params.hg19_chain, checkIfExists: true)
+                .mix(Channel.fromPath(params.hg38_chain, checkIfExists: true))
+                .collect()
+                .set { chain_files }
         }
+        
+        // Run COMBINE_SCOREFILES to process scorefiles and generate log_scorefiles
+        COMBINE_SCOREFILES(ch_scorefiles, chain_files)
+        ch_versions = ch_versions.mix(COMBINE_SCOREFILES.out.versions)
+        
+        // Use COMBINE_SCOREFILES outputs
+        ch_processed_scorefiles = COMBINE_SCOREFILES.out.scorefiles
+        ch_log_scorefiles = COMBINE_SCOREFILES.out.log_scorefiles
 
         //
         // SUBWORKFLOW: Make scoring file and target genomic data compatible
@@ -346,12 +334,14 @@ workflow PGSCCALC {
             ch_variants_direct.view { "DEBUG MAKE_COMPATIBLE variants input: ${it}" }
             ch_vcf_direct.view { "DEBUG MAKE_COMPATIBLE vcf input: ${it}" }
             
+            // Pass gVCF-derived data through MAKE_COMPATIBLE for proper relabeling
+            // This ensures PLINK2_RELABELPVAR processes the data correctly
+            // Pass empty VCF channel since we already have processed data
             MAKE_COMPATIBLE (
                 ch_geno_direct,
                 ch_pheno_direct,
                 ch_variants_direct,
-                ch_vcf_direct,
-
+                Channel.empty(),
             )
             ch_versions = ch_versions.mix(MAKE_COMPATIBLE.out.versions)
         }
@@ -405,14 +395,14 @@ workflow PGSCCALC {
                 intersection = ANCESTRY_PROJECT.out.intersection
             } else {
                 dummy_input = Channel.of(optional_input) // dummy file that doesn't exist
-                // associate each sampleset with the dummy file
-                MAKE_COMPATIBLE.out.geno.map {
-                    def meta = [:].plus(it[0])
-                    meta = meta.subMap(['id'])
-                    // one dummy file for groupTuple() size in match subworkflow
-                    meta.n_chrom = 1
-                    return meta
-                }
+                            // associate each sampleset with the dummy file
+            MAKE_COMPATIBLE.out.geno.map {
+                def meta = [:].plus(it[0])
+                meta = meta.subMap(['id'])
+                // one dummy file for groupTuple() size in match subworkflow
+                meta.n_chrom = 1
+                return meta
+            }
                     .unique()
                     .combine(dummy_input)
                     .set { intersection }
@@ -422,7 +412,7 @@ workflow PGSCCALC {
                 MAKE_COMPATIBLE.out.geno,
                 MAKE_COMPATIBLE.out.pheno,
                 MAKE_COMPATIBLE.out.variants,
-                ch_processed_scorefiles,  // mhi-qc: Use processed scorefiles instead of INPUT_CHECK.out.scorefiles
+                ch_processed_scorefiles,
                 intersection
             )
             ch_versions = ch_versions.mix(MATCH.out.versions)
@@ -479,7 +469,6 @@ workflow PGSCCALC {
                 relatedness,
                 APPLY_SCORE.out.scores,
                 projections,
-                // mhi-qc:
                 ch_log_scorefiles,
                 MATCH.out.db,
                 run_ancestry_assign,

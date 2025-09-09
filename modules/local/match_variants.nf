@@ -7,6 +7,10 @@ process MATCH_VARIANTS {
     tag "$meta.id chromosome $meta.chrom"
     errorStrategy 'finish'
 
+    // Persist match candidates to cache (if provided) for reuse across runs
+    cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
+    storeDir cachedir / "match" / "variants"
+
     conda "${task.ext.conda}"
 
     container "${ workflow.containerEngine == 'singularity' &&

@@ -8,6 +8,11 @@ process PLINK2_RELABELPVAR {
 
     publishDir "${params.outdir}/genomes/relabelled", mode: 'symlink'
 
+    // Persist relabelled pfile outputs to a stable cache location (if provided)
+    // to avoid recomputation across runs; mirrors PLINK2_RELABELBIM behavior
+    cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
+    storeDir cachedir / "genomes" / "relabelled"
+
     conda "${task.ext.conda}"
 
     container "${ workflow.containerEngine == 'singularity' &&

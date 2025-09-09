@@ -1,10 +1,10 @@
 #!/usr/bin/env nextflow
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    pgscatalog/pgsc_calc (fork - MHI (SKIP QC VERSION))
+    pgscatalog/pgsc_calc (fork - MHI (QC+REPORT)) + gVCF Processing
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Github : 
-    Docs   : 
+    Enhanced version that can process gVCF files directly into PGS-ready VCFs
+    before running the standard pgscalc workflow.
 ----------------------------------------------------------------------------------------
 */
 
@@ -16,13 +16,8 @@ nextflow.enable.dsl = 2
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
+// Import existing pgscalc modules
 include { PGSCCALC } from './workflows/pgsc_calc'
-
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    VALIDATE & PRINT PARAMETER SUMMARY
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -50,7 +45,7 @@ process COLLECT_SCOREFILES {
 process GENERATE_REPORTS {
     label 'process_low'
     container = 'docker.io/ismaelhc94/pgsc-mhi-report'
-    publishDir "${params.outdir}/${params.sampleset}/reports", mode: 'symlink'
+    publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
     
     input:
     path(result_files)
@@ -59,6 +54,9 @@ process GENERATE_REPORTS {
     
     output:
     path "patient*.html"
+    path "patient_summaries.csv"
+    path "subset/patient*subset_report.html", optional: true
+    path "subset/pgs_subset.csv", optional: true
     
     script:
     def font_setup = fontawesome_font.name != 'NO_FILE' ? 
@@ -77,6 +75,9 @@ process GENERATE_REPORTS {
     # Copy the provided template to work directory with a new name
     cp ${report_template} working_patient_report_template.qmd
     
+    # Expose optional subset scores to R
+    export SUBSET_SCORES='${params.target_scores_report ?: ''}'
+
     # Run R script directly
     Rscript --vanilla -e "
     library(tidyverse)
@@ -140,31 +141,91 @@ process GENERATE_REPORTS {
         execute_params = list(patient_id = pid)
       )
     }
+
+    # Optional: subset report generation if SUBSET_SCORES provided
+    subset_arg <- Sys.getenv('SUBSET_SCORES')
+    if (nzchar(subset_arg)) {
+      message('Subset scores requested: ', subset_arg)
+      subset_vec <- strsplit(subset_arg, ',')[[1]] |> trimws()
+      pgs_path <- list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]
+      pop_path <- list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]
+      scores_all <- read_tsv(gzfile(pgs_path))
+      # Extract base PGS ID from full PGS column (e.g., PGS000016_hmPOS_GRCh38 -> PGS000016)
+      # For custom scores like brugadaMTAGnoOverlap, extract the base name before 'noOverlap'
+      scores_all_with_base <- scores_all %>%
+        dplyr::mutate(PGS_base = dplyr::case_when(
+          stringr::str_detect(PGS, '^PGS[0-9]+') ~ stringr::str_extract(PGS, '^[^_]+'),
+          stringr::str_detect(PGS, 'noOverlap\\\$') ~ stringr::str_remove(PGS, 'noOverlap\\\$'),
+          TRUE ~ PGS
+        ))
+      scores_sub <- dplyr::filter(scores_all_with_base, PGS_base %in% subset_vec)
+      if (nrow(scores_sub) == 0) {
+        warning('No rows found for requested subset scores; skipping subset report')
+      } else {
+        dir.create('subset', showWarnings = FALSE)
+        pop_all <- read_tsv(gzfile(pop_path))
+        # Reuse existing pipeline on the filtered scores
+        scores_popsim_sub <- scores_sub %>%
+          dplyr::left_join(pop_all %>% dplyr::select(IID, MostSimilarPop), by = 'IID') %>%
+          dplyr::mutate(simple_id = stringr::str_extract(IID, '[^_]+\\\$'))
+        run_patient_data_sub <- scores_popsim_sub %>%
+          dplyr::filter(sampleset != 'reference') %>%
+          dplyr::mutate(Overall_Percentile = round(dplyr::percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
+          dplyr::group_by(MostSimilarPop) %>%
+          dplyr::mutate(Population_Percentile = round(dplyr::percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
+          dplyr::ungroup()
+        # Write subset artifacts for publishing
+        readr::write_tsv(scores_sub, gzfile('subset/pgs.txt.gz'))
+        readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
+        readr::write_csv(scores_sub, 'subset/pgs_subset.csv')
+        # Save subset patient summaries
+        subset_summary_file <- file.path('subset', 'patient_summaries.csv')
+        subset_text_data <- run_patient_data_sub %>%
+          dplyr::mutate(
+            Summary = sprintf(
+              'Patient: %s, Score: %s, Overall Percentile: %.1f%%',
+              IID,
+              Z_MostSimilarPop,
+              Overall_Percentile
+            )
+          )
+        writeLines(subset_text_data\\\$Summary, subset_summary_file)
+        
+        # Copy FontAwesome font and template to subset folder
+        if (file.exists('fontawesome-webfont.ttf')) {
+          file.copy('fontawesome-webfont.ttf', 'subset/fontawesome-webfont.ttf', overwrite = TRUE)
+          message('FontAwesome font copied to subset folder')
+        } else {
+          warning('FontAwesome font not found, subset reports may not display icons correctly')
+        }
+        file.copy('working_patient_report_template.qmd', 'subset/working_patient_report_template.qmd', overwrite = TRUE)
+        
+        # derive patient IDs from subset run (exclude HG00 references)
+        ids <- run_patient_data_sub %>%
+          dplyr::filter(!grepl('^HG00', IID)) %>%
+          dplyr::pull(simple_id) %>%
+          unique()
+        if (length(ids) > 0) {
+          owd <- getwd(); setwd('subset'); on.exit(setwd(owd), add = TRUE)
+          for (pid in ids) {
+            message(sprintf('Generating subset reports for patient %s...', pid))
+            quarto::quarto_render('working_patient_report_template.qmd', output_file = paste0('patient_', pid, '_subset_report.html'), execute_params = list(patient_id = pid))
+          }
+        }
+      }
+    }
     "
     """
 }
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    RUN ALL WORKFLOWS
+    MAIN WORKFLOW
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-// Main workflow that skips QC and goes directly to PGSC_CALC
 workflow {
-    log.info """
-    ===========================================
-    PGSC_CALC pipeline (SKIP QC VERSION)
-    ===========================================
-    VCF Files: ${params.vcf_files}
-    Sample Set: ${params.sampleset}
-    Scorefile Folder: ${params.scorefile_folder}
-    PGS IDs: ${params.pgs_id ?: 'None'}
-    PGP IDs: ${params.pgp_id ?: 'None'}
-    EFO IDs: ${params.efo_id ?: 'None'}
-    Report Template: ${params.report_template}
-    ===========================================
-    """
+    log.info "Starting PGSC_CALC with gVCF processing..."
     
     // Handle scorefile folder input if provided
     ch_collected_scorefiles = Channel.empty()
@@ -193,26 +254,13 @@ workflow {
               "  - scorefile (individual scoring file path)"
     }
     
-    // Create VCF input channel for PGSCCALC
-    ch_vcf_input = Channel
-        .fromPath(params.vcf_files)
-        .map { vcf_file -> 
-            def meta = [id: params.sampleset]
-            [ meta, vcf_file ]
-        }
-    
-    // Debug output for VCF input
-    ch_vcf_input.view { meta, vcf_file ->
-        "ch_vcf_input: meta=${meta}, vcf_file=${vcf_file}"
-    }
-    
     // log the ch_collected_scorefiles
     ch_collected_scorefiles.view { scorefile ->
         "ch_collected_scorefiles: scorefile=${scorefile}"
     }
     
-    // Pass VCF files directly to PGSCCALC (let it handle VCF conversion internally)
-    PGSCCALC(Channel.value(null), ch_collected_scorefiles, ch_vcf_input)
+    // Call PGSCCALC with gVCF processing integrated
+    PGSCCALC(ch_collected_scorefiles)
     
     // Step 3: Generate reports using both score files and ancestry results from PGSC_CALC
     // Extract just the file paths from the metadata tuples
@@ -227,14 +275,4 @@ workflow {
     
     // Generate reports using all results and the provided template
     GENERATE_REPORTS(all_result_files, file(params.report_template), fontawesome_input)
-    
 }
-
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    THE END
-    |\__/,|   (`\
-  _.|o o  |_   ) )
--(((---(((--------
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/ 
