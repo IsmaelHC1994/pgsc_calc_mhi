@@ -7,6 +7,10 @@ process PLINK2_SCORE {
 
     tag "$meta.id chromosome $meta.chrom effect type $scoremeta.effect_type $scoremeta.n"
 
+    // Persist score calculation outputs to cache for reuse across runs
+    cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
+    storeDir cachedir / "scores" / "plink2"
+
     conda "${task.ext.conda}"
 
     container "${ workflow.containerEngine == 'singularity' &&

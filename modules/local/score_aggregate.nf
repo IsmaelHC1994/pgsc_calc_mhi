@@ -4,6 +4,10 @@ process SCORE_AGGREGATE {
     label 'pgscatalog_utils' // controls conda, docker, + singularity options
     tag "$meta.id"
 
+    // Persist aggregated scores to cache (if provided)
+    cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
+    storeDir cachedir / "scores" / "aggregate"
+
     conda "${task.ext.conda}"
 
     container "${ workflow.containerEngine == 'singularity' &&
