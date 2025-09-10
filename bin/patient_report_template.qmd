@@ -180,25 +180,35 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
     dplyr::filter(IID == full_patient_id) %>%
     dplyr::pull(Overall_Percentile)
 
-  x <- rnorm(500)
-  df_plot <- data.frame(x = x, y = dnorm(x))
-  max_y <- max(df_plot$y)
+  # Build bell curve on a fixed grid for stable gradient
+  x_vals <- seq(-4, 4, length.out = 2001)
+  y_vals <- dnorm(x_vals)
+  df_bell <- tibble(x = x_vals, y = y_vals)
+  max_y <- max(df_bell$y)
   patient_x <- qnorm(patient_percentile/100)
   # pastel line color that contrasts with all three panels
   patient_line_color <- "#8B5CF6"  # pastel violet
-
-  p <- ggplot(df_plot, aes(x = x, y = y)) +
-    # Bell curve background
+  
+  # Percentile thresholds (20th and 80th)
+  t_low <- qnorm(0.20)
+  t_high <- qnorm(0.80)
+  
+  p <- ggplot(df_bell, aes(x = x, y = y)) +
+    # Create smooth gradient using many small segments
+    geom_segment(aes(x = x, xend = x, y = 0, yend = y, color = x), 
+                 size = 2.5, alpha = 0.9) +
+    scale_color_gradient2(
+      low = "#87CEEB",      # sky blue - more pronounced
+      mid = "#F0E68C",      # khaki - more pronounced
+      high = "#FFB6C1",     # light pink - more pronounced
+      midpoint = 0,         # center the gradient at x=0
+      guide = "none"
+    ) +
+    # Bell curve outline
     geom_line(color = "gray70", linewidth = 3, alpha = 0.9) +
-    geom_ribbon(aes(ymin = 0, ymax = y), fill = "gray90", alpha = 0.35) +
-    
-    # Color-coded risk sections
-    annotate("rect", xmin = -4, xmax = -1.5, ymin = 0, ymax = max_y,
-             fill = "lightblue", alpha = 0.3) +
-    annotate("rect", xmin = -1.5, xmax = 1.5, ymin = 0, ymax = max_y,
-             fill = "lightyellow", alpha = 0.3) +
-    annotate("rect", xmin = 1.5, xmax = 4, ymin = 0, ymax = max_y,
-             fill = "lightcoral", alpha = 0.3) +
+    # Visual thresholds (commented out - using gradient colors instead)
+    # geom_vline(xintercept = c(t_low, t_high), linetype = "dashed",
+    #            linewidth = 1.2, color = c("#5DADE2", "#E57373"), alpha = 0.6) +
     
     # Patient line (limited height to match bell curve)
     annotate("segment", x = patient_x, xend = patient_x, 
@@ -207,7 +217,7 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
     # Add human icons in each risk zone using FontAwesome - positioned very close to x-axis
     annotate("text", x = -2.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
-             size = 22, color = "blue") +
+             size = 22, color = "#87CEEB") +  # sky blue - same as gradient
     annotate("text", x = -0.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
              size = 18, color = "gray50") +
@@ -219,7 +229,7 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
              size = 18, color = "gray50") +
     annotate("text", x = 2.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
-             size = 22, color = "red") +
+             size = 22, color = "#FFB6C1") +  # light pink - same as gradient
     
     # Patient marker icon - positioned at bell curve height
     annotate("text", x = patient_x, y = max_y, 
@@ -260,11 +270,16 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
       title = paste("Polygenic Risk Score:", if(!is.null(pgs_id)) pgs_id else "Overall"),
       subtitle = "Normal Distribution with Risk Zones"
     ) +
-    # Labels for risk sections anchored to quantile scale
-    # place explanatory texts centred inside the coloured panels
-    annotate("text", x = -2.75, y = max_y*0.55, label = "Fewer individuals have\ndecreased risk", size = 10, color = "#4575b4", lineheight = 1.05) +
-    annotate("text", x = 0,      y = max_y*0.55, label = "Most individuals have\naverage risk", size = 10, color = "gray30", lineheight = 1.05) +
-    annotate("text", x =  2.75,  y = max_y*0.55, label = "Fewer individuals have\nincreased risk", size = 10, color = "#d73027", lineheight = 1.05) +
+    # Labels for risk sections (single line to avoid odd breaks)
+    annotate("text", x = -2.75, y = max_y*0.55, 
+             label = "Fewer individuals have decreased risk", 
+             size = 10, color = "#4575b4") +
+    annotate("text", x = 0, y = max_y*0.55, 
+             label = "Most individuals have average risk", 
+             size = 10, color = "gray30") +
+    annotate("text", x = 2.75, y = max_y*0.55, 
+             label = "Fewer individuals have increased risk", 
+             size = 10, color = "#d73027") +
     # Quantile-based x-axis; keep y scale from earlier (0..0.5)
     scale_x_continuous(
       limits = c(-4, 4),
