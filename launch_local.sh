@@ -10,24 +10,28 @@ mkdir -p logs
 LOG_FILE="logs/pgsc_calc_local_$(date +%Y-%m-%d_%H-%M-%S).log"
 
 # Run the Nextflow command and pipe output to tee for both display and logging
-nextflow run main.nf \
+nextflow run main_with_gvcf.nf \
     -profile docker \
-    --sampleset comprehensive_test \
-    --vcf_files "/home/ihc/codebase/cag/bed_from_scores/results/comprehensive_test/vcf/comprehensive_test.pgsc.vcf.gz" \
-    --pgs_id "PGS004862" \
-    --report_template "/home/ihc/codebase/mhi-prs/run_pgsc_2_01_local/bin/patient_report_template.qmd" \
-    --fontawesome_font "/home/ihc/codebase/mhi-prs/run_pgsc_2_01_local/assets/fonts/fontawesome-webfont.ttf" \
+    --sampleset gvcfTest2Multiple \
+    --gvcf_files "/home/ihc/tmp/hiro_pgsc_bak/24-1979.hard-filtered.gvcf.gz /home/ihc/tmp/hiro_pgsc_bak/24-1550i.hard-filtered.gvcf" \
+    --scorefile_custom "/home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/scores/scores.tar.gz" \
     --target_build GRCh38 \
     --genotypes_cache cache \
-    --run_ancestry /home/ihc/codebase/mhi-prs/run_pgsc_2_01_local/assets/qc/pgsc_HGDP+1kGP_v1.tar.zst \
-    --hg19_chain /home/ihc/codebase/mhi-prs/run_pgsc_2_01_local/assets/qc/hg19ToHg38.over.chain.gz \
-    --hg38_chain /home/ihc/codebase/mhi-prs/run_pgsc_2_01_local/assets/qc/hg38ToHg19.over.chain.gz \
+    --reference_genome /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/hg38.fa.gz \
+    --run_ancestry /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/pgsc_1000G_v1.tar.zst \
     --max_cpus 8 \
     --max_memory 8GB \
     --liftover \
     -resume \
-    -with-trace traceMHI_local_$(date +%Y%m%d_%H%M%S).txt 2>&1 | tee "${LOG_FILE}" 
+    -with-trace MHI_local_$(date +%Y%m%d_%H%M%S).txt 2>&1 | tee "${LOG_FILE}" 
 
+    # --report_template "/home/ihc/codebase/mhi-prs/run_pgsc_2_01/bin/patient_report_template.qmd" \
+    # --pgs_id "PGS004862" \
+    # --run_ancestry /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/pgsc_HGDP+1kGP_v1.tar.zst \
+
+# --hg19_chain /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/hg19ToHg38.over.chain.gz \
+    # --hg38_chain /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/hg38ToHg19.over.chain.gz \
+    
 
     # --pgs_id PGS000016,PGS000768 \ # FIXME NETWORK IS UNREACHABLE. will have to download the files and place then manually. to document.
     # -c nf_allianceCA.config \

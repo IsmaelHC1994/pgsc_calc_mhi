@@ -31,7 +31,7 @@
       "type": "section"
     },
     {
-      "id": "scorefile_folder",
+      "id": "scorefile_custom",
       "label": "Scorefile Tar File (Upload)",
       "helpText": "Tar file containing one or more scoring files in PGS Catalog format. Alternative to using PGS Catalog IDs below.",
       "type": "data",

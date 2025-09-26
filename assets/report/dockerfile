@@ -30,10 +30,13 @@ RUN curl -LO https://github.com/quarto-dev/quarto-cli/releases/download/v1.3.450
 RUN R -e "install.packages(c('tidyverse', 'quarto', 'ggridges', 'patchwork', 'DT', 'viridis', 'here', 'showtext', 'ggthemes'), dependencies=TRUE)" && \
     R -e "install.packages('tidyplots', repos = c('https://timcdlucas.r-universe.dev', 'https://cloud.r-project.org'))"
 
-# # Install FontAwesome
-# RUN mkdir -p /usr/share/fonts && \
-#     curl -o /usr/share/fonts/fontawesome-webfont.ttf -L https://github.com/FortAwesome/Font-Awesome/raw/master/fonts/fontawesome-webfont.ttf && \
-#     fc-cache -f -v
+# copying the link from github directly wont work check the url so:
+# /tree/ = GitHub web interface (serves HTML pages) (wrong)
+# /raw/ = Raw file content (serves the actual binary file) (correct)
+# Install FontAwesome
+RUN mkdir -p /usr/share/fonts && \
+    curl -o /usr/share/fonts/fontawesome-webfont.ttf -L https://github.com/IsmaelHC1994/pgsc_calc_mhi/raw/dev-mhi-hpc/assets/report/fontawesome-webfont.ttf && \
+    fc-cache -f -v
 
 # Create working directory with appropriate permissions
 RUN mkdir -p /analysis && \
