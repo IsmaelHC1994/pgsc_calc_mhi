@@ -46,7 +46,7 @@ include { PGSCCALC } from './workflows/pgsc_calc'
 process COLLECT_SCOREFILES {
     label 'process_low'
     input:
-    path(scorefile_folder)
+    path(scorefile_custom)
     
     output:
     path("scorefiles/*.txt"), emit: scorefiles
@@ -54,7 +54,7 @@ process COLLECT_SCOREFILES {
     script:
     """
     mkdir -p scorefiles
-    tar xf ${scorefile_folder} -C scorefiles/
+    tar xf ${scorefile_custom} -C scorefiles/
     """
 }
 
@@ -67,7 +67,6 @@ process GENERATE_REPORTS {
     input:
     path(result_files)
     path(report_template)
-    path(fontawesome_font, stageAs: 'fontawesome_font.ttf')
     
     output:
     path "patient*.html"
@@ -76,9 +75,6 @@ process GENERATE_REPORTS {
     path "subset/pgs_subset.csv", optional: true
     
     script:
-    def font_setup = fontawesome_font.name != 'NO_FILE' ? 
-        "cp ${fontawesome_font} fontawesome-webfont.ttf" : 
-        "echo 'No FontAwesome font provided, using fallback'"
     """
     # Set up cache directories for Quarto/Deno
     mkdir -p .deno_cache .quarto_cache .xdg_cache
@@ -86,8 +82,8 @@ process GENERATE_REPORTS {
     export QUARTO_CACHE_DIR=\$PWD/.quarto_cache
     export XDG_CACHE_HOME=\$PWD/.xdg_cache
     
-    # Handle FontAwesome font (optional)
-    ${font_setup}
+    # Copy FontAwesome from container to working directory
+    cp /usr/share/fonts/fontawesome-webfont.ttf fontawesome-webfont.ttf 2>/dev/null || echo 'FontAwesome not found in container, using fallback'
     
     # Copy the provided template to work directory with a new name
     cp ${report_template} working_patient_report_template.qmd
@@ -189,7 +185,9 @@ process GENERATE_REPORTS {
         # Write subset artifacts for publishing
         readr::write_tsv(scores_sub, gzfile('subset/pgs.txt.gz'))
         readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
-        readr::write_csv(scores_sub, 'subset/pgs_subset.csv')
+        # Filter out reference samples before writing CSV
+        scores_sub_filtered <- dplyr::filter(scores_sub, sampleset != 'reference')
+        readr::write_csv(scores_sub_filtered, 'subset/pgs_subset.csv')
         # Save subset patient summaries
         subset_summary_file <- file.path('subset', 'patient_summaries.csv')
         subset_text_data <- run_patient_data_sub %>%
@@ -232,9 +230,9 @@ workflow {
     
     // Handle scorefile folder input if provided
     ch_collected_scorefiles = Channel.empty()
-    if (params.scorefile_folder) {
+    if (params.scorefile_custom) {
         // Use the zip file directly
-        COLLECT_SCOREFILES(file(params.scorefile_folder))
+        COLLECT_SCOREFILES(file(params.scorefile_custom))
         ch_collected_scorefiles = COLLECT_SCOREFILES.out.scorefiles
     } else {
         // Create a dummy channel for when no scorefiles are collected
@@ -242,15 +240,15 @@ workflow {
     }
     
     // Validate that at least one source of scoring files is provided
-    def has_scorefile_folder = params.scorefile_folder && params.scorefile_folder != ""
+    def has_scorefile_custom = params.scorefile_custom && params.scorefile_custom != ""
     def has_pgs_id = params.pgs_id && params.pgs_id != ""
     def has_pgp_id = params.pgp_id && params.pgp_id != ""
     def has_efo_id = params.efo_id && params.efo_id != ""
     def has_scorefile = params.scorefile && params.scorefile != ""
     
-    if (!has_scorefile_folder && !has_pgs_id && !has_pgp_id && !has_efo_id && !has_scorefile) {
+    if (!has_scorefile_custom && !has_pgs_id && !has_pgp_id && !has_efo_id && !has_scorefile) {
         error "ERROR: No scoring files specified! Please provide either:\n" +
-              "  - scorefile_folder (folder with scoring files)\n" +
+              "  - scorefile_custom (folder with scoring files)\n" +
               "  - pgs_id (PGS Catalog score IDs)\n" +
               "  - pgp_id (PGS Catalog publication IDs)\n" +
               "  - efo_id (PGS Catalog EFO trait IDs)\n" +
@@ -289,11 +287,8 @@ workflow {
     // Combine all files into a single channel
     all_result_files = score_files_channel.mix(ancestry_results_channel).collect()
     
-    // Handle optional FontAwesome font
-    fontawesome_input = params.fontawesome_font ? file(params.fontawesome_font) : file('NO_FILE')
-    
     // Generate reports using all results and the provided template
-    GENERATE_REPORTS(all_result_files, file(params.report_template), fontawesome_input)
+    GENERATE_REPORTS(all_result_files, file(params.report_template))
 
 }
 

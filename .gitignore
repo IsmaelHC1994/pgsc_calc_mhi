@@ -20,3 +20,4 @@ docs/_build
 cache
 trace*
 logs/
+MHI_local_*.txt

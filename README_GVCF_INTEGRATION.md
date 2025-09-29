@@ -38,7 +38,7 @@ chmod +x launch_gvcf.sh
   --gvcf_files sample1.gvcf.gz,sample2.gvcf.gz \
   --reference_db ref.tar.zst \
   --reference_genome hg38.fa.gz \
-  --scorefile_folder scores.tar.gz \
+  --scorefile_custom scores.tar.gz \
   --report_template template.qmd
 ```
 
@@ -48,7 +48,7 @@ chmod +x launch_gvcf.sh
 # Launch with existing VCF files
 ./launch_gvcf.sh -t vcf -s brugada \
   --vcf_files sample1.vcf.gz,sample2.vcf.gz \
-  --scorefile_folder scores.tar.gz \
+  --scorefile_custom scores.tar.gz \
   --report_template template.qmd
 ```
 

@@ -12,28 +12,28 @@ LOG_FILE="logs/pgsc_calc_local_$(date +%Y-%m-%d_%H-%M-%S).log"
 # Run the Nextflow command and pipe output to tee for both display and logging
 nextflow run main_with_gvcf.nf \
     -profile docker \
-    --sampleset gvcfTest2Multiple \
-    --gvcf_files "/home/ihc/tmp/hiro_pgsc_bak/24-1979.hard-filtered.gvcf.gz /home/ihc/tmp/hiro_pgsc_bak/24-1550i.hard-filtered.gvcf" \
-    --scorefile_custom "/home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/scores/scores.tar.gz" \
-    --target_build GRCh38 \
-    --genotypes_cache cache \
+    --gvcf_files "/home/ihc/tmp/hiro_pgsc_bak/24-1979.hard-filtered.gvcf.gz /home/ihc/tmp/hiro_pgsc_bak/24-1550i.hard-filtered.gvcf.gz" \
     --reference_genome /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/hg38.fa.gz \
+    --sampleset gvcfTest2Multiple \
+    --pgs_id PGS000016,PGS000768 \
+    --genotypes_cache cache \
     --run_ancestry /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/pgsc_1000G_v1.tar.zst \
+    --target_build GRCh38 \
+    --liftover \
+    --hg19_chain /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/hg19ToHg38.over.chain.gz \
+    --hg38_chain /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/hg38ToHg19.over.chain.gz \
     --max_cpus 8 \
     --max_memory 8GB \
-    --liftover \
     -resume \
     -with-trace MHI_local_$(date +%Y%m%d_%H%M%S).txt 2>&1 | tee "${LOG_FILE}" 
-
+    
+# 
+    # --scorefile_custom "/home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/scores/scores.tar.gz" \
     # --report_template "/home/ihc/codebase/mhi-prs/run_pgsc_2_01/bin/patient_report_template.qmd" \
     # --pgs_id "PGS004862" \
     # --run_ancestry /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/pgsc_HGDP+1kGP_v1.tar.zst \
 
-# --hg19_chain /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/hg19ToHg38.over.chain.gz \
-    # --hg38_chain /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/hg38ToHg19.over.chain.gz \
-    
 
-    # --pgs_id PGS000016,PGS000768 \ # FIXME NETWORK IS UNREACHABLE. will have to download the files and place then manually. to document.
     # -c nf_allianceCA.config \
     # --scorefile /home/ihcasti/scratch/mhi-prs/run_pgsc_2_01/assets/qc/scores/brugada_mtag.txt \
     # --skip_ancestry \

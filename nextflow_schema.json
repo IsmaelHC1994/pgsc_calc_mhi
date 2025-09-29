@@ -31,7 +31,7 @@
           "description": "VCF files that will be used as input for analysis",
           "fa_icon": "fas fa-file"
         },
-        "scorefile_folder": {
+        "scorefile_custom": {
           "type": "string",
           "format": "directory-path",
           "description": "Folder containing one or more scoring files in PGS Catalog format",
