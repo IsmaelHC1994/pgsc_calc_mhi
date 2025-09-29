@@ -2,20 +2,20 @@
   "fields": [
     {
       "id": "gvcf_files",
-      "label": "gVCF Files",
-      "helpText": "gVCF files to process (e.g., .hard-filtered.gvcf.gz files)",
+      "label": "gVCF File",
+      "helpText": "gVCF file to process (e.g., .hard-filtered.gvcf.gz)",
       "type": "data",
       "dataFilter": {
         "dataType": "file"
       },
-      "maxValues": 5,
+      "maxValues": 1,
       "minValues": 1
      },
 
     {
       "id": "reference_genome",
       "label": "Reference Genome (FASTA)",
-      "helpText": "FASTA reference genome for hg38",
+      "helpText": "FASTA for the reference genome being used (gz). Used during gvcf->vcf conversion. Recommended to use hg38.gz; hg19 is partially supported.",
       "type": "data",
       "dataFilter": {
         "dataType": "file"
@@ -32,56 +32,14 @@
     {
       "id": "sampleset",
       "label": "Sample Set Name",
-      "helpText": "Name identifier for this sample set (e.g., 'brugada', 'cohort1')",
-      "type": "textbox",
-      "value": ""
-    },
-    {
-      "id": "section_scorefiles",
-      "label": "Scoring File Options",
-      "helpText": "Either upload a tar file with 1 or more scoring files (manually edited in pgscalc-format: https://pgsc-calc.readthedocs.io/en/latest/how-to/calculate_pgscatalog.html), or specify PGS Catalog IDs to download. If a target, focused report is desired in addition to the overall one, you must specify the 'Subset PGS IDs for additional report' section below.",
-      "type": "section"
-    },
-    {
-      "id": "scorefile_custom",
-      "label": "Scorefile Tar File (Upload)",
-      "helpText": "Tar file containing one or more scoring files in PGS Catalog format. Alternative to using PGS Catalog IDs below.",
-      "type": "data",
-      "dataFilter": {
-        "dataType": "file"
-      },
-      "maxValues": 1,
-      "minValues": 0
-    },
-    {
-      "id": "pgs_id",
-      "label": "PGS Score IDs (Download)",
-      "helpText": "Comma-separated list of PGS score IDs to download from PGS Catalog, e.g. PGS000802,PGS000001. Alternative to uploading scorefile folder above.",
-      "type": "textbox",
-      "value": ""
-    },
-    {
-      "id": "target_scores_report",
-      "label": "Subset PGS IDs for additional report",
-      "helpText": "Optional: comma-separated PGS IDs to produce an additional subset report and CSV (e.g., PGS000802,PGS000001). If a manual tar file is supplied, the score labels passed here must match the metadata in the tar file. Leave empty to skip.",
+      "helpText": "Name identifier for this sample set (e.g. 'cohort1' 'run20250929'). Must not contain spaces or reserved characters (eg. _, -, .).",
       "type": "textbox",
       "value": ""
     },
     {
       "id": "report_template",
       "label": "Patient Report Template",
-      "helpText": "Quarto template file (.qmd) for generating patient reports",
-      "type": "data",
-      "dataFilter": {
-        "dataType": "file"
-      },
-      "maxValues": 1,
-      "minValues": 1
-    },
-    {
-      "id": "fontawesome_font",
-      "label": "FontAwesome Font File (Optional)",
-      "helpText": "Optional FontAwesome font file (.ttf) for displaying person icons in reports. If not provided, simple circles will be used instead.",
+      "helpText": "Quarto template file (.qmd) for generating patient reports. By default, the pipeline will use a packaged template.",
       "type": "data",
       "dataFilter": {
         "dataType": "file"
@@ -92,21 +50,15 @@
     {
       "id": "outdir",
       "label": "outdir",
-      "helpText": "The output directory where the results will be saved. You have to use absolute paths to storage on Cloud infrastructure.",
+      "helpText": "The output directory where the results will be saved.",
       "type": "textbox",
       "value": "out",
       "hidden": true
     },
     {
-      "id": "copy_genomes",
-      "label": "copy_genomes",
-      "type": "checkbox",
-      "helpText": "Copy harmonised genomes (plink2 pgen/pvar/psam files) to outdir"
-    },
-    {
-      "id": "section_compatibilityoptions",
-      "label": "Compatibility options",
-      "helpText": "Define parameters that control how scoring files and target genomes are made compatible with each other",
+      "id": "section_scorefiles",
+      "label": "Scoring File Options",
+      "helpText": "Either upload a tar file with 1 or more scoring files (manually edited in pgscalc-format: https://pgsc-calc.readthedocs.io/en/latest/how-to/calculate_pgscatalog.html), or specify PGS Catalog IDs to download.",
       "type": "section"
     },
     {
@@ -117,15 +69,40 @@
       "value": "GRCh38"
     },
     {
+      "id": "pgs_id",
+      "label": "PGS Score IDs (Download)",
+      "helpText": "Comma-separated list of PGS score IDs to download from PGS Catalog, e.g. PGS000802,PGS000001. Alternative to uploading custom scores.",
+      "type": "textbox",
+      "value": ""
+    },
+    {
+      "id": "target_scores_report",
+      "label": "Subset PGS IDs to generate an additional report",
+      "helpText": "Optional: comma-separated PGS IDs to produce an additional subset report and CSV (e.g., PGS000802,PGS000001). If a manual tar file is supplied, the score labels passed here must match the metadata in the tar file. Leave empty to skip.",
+      "type": "textbox",
+      "value": ""
+    },
+    {
+      "id": "scorefile_custom",
+      "label": "Custom score file packaged in .tar (Upload)",
+      "helpText": "Tar file containing one or more scoring files in PGS Catalog format. Alternative to using PGS Catalog IDs.",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 0
+    },
+    {
       "id": "liftover",
-      "label": "liftover",
+      "label": "liftover (Optional)",
       "type": "checkbox",
-      "helpText": "Lift scoring files to match your target genomes. Requires build information in the header of the scoring files."
+      "helpText": "Only use with custom scoring files. Perform liftover to match your target genomes. Requires build information in the header of the custom scoring files."
     },
     {
       "id": "hg19_chain",
       "label": "hg19 to hg38 Chain File (Optional)",
-      "helpText": "Optional UCSC chain file for converting from hg19 to hg38. Only needed if using scorefile_custom with hg19 scores and your data is hg38.",
+      "helpText": "Optional UCSC chain file for converting from hg19 to hg38. Only needed if using custom scoring files in hg19 and your data is in hg38.",
       "type": "data",
       "dataFilter": {
         "dataType": "file"
@@ -136,7 +113,7 @@
     {
       "id": "hg38_chain",
       "label": "hg38 to hg19 Chain File (Optional)",
-      "helpText": "Optional UCSC chain file for converting from hg38 to hg19. Only needed if using scorefile_custom with hg38 scores and your data is hg19.",
+      "helpText": "Optional UCSC chain file for converting from hg38 to hg19. Only needed if using a custom scoring file in hg38 and your data is in hg19.",
       "type": "data",
       "dataFilter": {
         "dataType": "file"
@@ -150,12 +127,6 @@
       "helpText": "Minimum proportion of variants required to successfully remap a scoring file to a different genome build.",
       "type": "number",
       "value": 0.95
-    },
-    {
-      "id": "section_matchingoptions",
-      "label": "Matching options",
-      "helpText": "Define how variants are matched across scoring files and target genomes.",
-      "type": "section"
     },
     {
       "id": "keep_multiallelic",
@@ -231,7 +202,7 @@
     {
       "id": "ld_grch37",
       "label": "ld_grch37",
-      "helpText": "Path to a file that contains areas of high linkage disequilibrium in the reference data (build GRCh37).",
+      "helpText": "Path to a file that contains areas of high linkage disequilibrium in the reference data (build GRCh37). Optional; by default, pgsc_calc will use a packaged LD file prepared by developers to be used for the proper build of the reference database.",
       "type": "data",
       "dataFilter": {
         "dataType": "file"
@@ -242,27 +213,13 @@
     {
       "id": "ld_grch38",
       "label": "ld_grch38",
-      "helpText": "Path to a file that contains areas of high linkage disequilibrium in the reference data (build GRCh38).",
+      "helpText": "Path to a file that contains areas of high linkage disequilibrium in the reference data (build GRCh38). Optional; by default, pgsc_calc will use a packaged LD file prepared by developers to be used for the proper build of the reference database.",
       "type": "data",
       "dataFilter": {
         "dataType": "file"
       },
       "maxValues": 1,
       "minValues": 0
-    },
-    {
-      "id": "ref_format_version",
-      "label": "ref_format_version",
-      "helpText": "Version of the default reference database",
-      "type": "textbox",
-      "value": "v0.1"
-    },
-    {
-      "id": "ancestry_checksums",
-      "label": "ancestry_checksums",
-      "helpText": "Used to validate files in the reference database when built",
-      "type": "textbox",
-      "value": ""
     },
     {
       "id": "section_geneticancestryoptions",

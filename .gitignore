@@ -20,3 +20,9 @@ docs/_build
 cache
 trace*
 logs/
+MHI_local_*.txt
+assets/mhi/hg19ToHg38.over.chain
+assets/mhi/hg19ToHg38.over.chain.gz
+assets/mhi/hg38ToHg19.over.chain
+assets/mhi/hg38ToHg19.over.chain.gz
+assets/mhi/patient_report_template.qmd

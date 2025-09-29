@@ -22,7 +22,7 @@ process COMBINE_SCOREFILES {
     script:
     def args = task.ext.args ?: ''
 
-    if (params.liftover)
+        if (params.liftover)
         """
         pgscatalog-combine -s $raw_scores \
             --liftover \

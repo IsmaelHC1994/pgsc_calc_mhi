@@ -173,50 +173,75 @@ df_plot +
 ```{r bell-labels, echo=FALSE, fig.width=16, fig.height=4}
 #| label: bell-labels
 
-# Complete bell curve with all elements
-df_plot +
-  annotate("rect", xmin = -4, xmax = -1.5, ymin = 0, ymax = 0.4, 
-           fill = "lightblue", alpha = 0.3) +
-  annotate("rect", xmin = -1.5, xmax = 1.5, ymin = 0, ymax = 0.4, 
-           fill = "lightyellow", alpha = 0.3) +
-  annotate("rect", xmin = 1.5, xmax = 4, ymin = 0, ymax = 0.4, 
-           fill = "lightcoral", alpha = 0.3) +
-  # Patient line (limited height to match bell curve)
-  annotate("segment", x = qnorm(patient_percentile/100), xend = qnorm(patient_percentile/100), 
-           y = 0, yend = 0.4, color = "red", linewidth = 2) +
-  # Add human icons in each risk zone using FontAwesome - positioned very close to x-axis
-  annotate("text", x = -2.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+# Improved bell curve with gradient risk zones and larger text
+
+# Build bell curve on a fixed grid for stable gradient
+x_vals <- seq(-4, 4, length.out = 2001)
+y_vals <- dnorm(x_vals)
+df_bell <- tibble(x = x_vals, y = y_vals)
+max_y <- max(df_bell$y)
+
+# Percentile thresholds (20th and 80th)
+t_low <- qnorm(0.20)
+t_high <- qnorm(0.80)
+patient_x <- qnorm(patient_percentile/100)
+patient_line_color <- "#8B5CF6"  # violet
+
+ggplot(df_bell, aes(x = x, y = y)) +
+  # Create smooth gradient using many small segments
+  geom_segment(aes(x = x, xend = x, y = 0, yend = y, color = x), 
+               size = 2.5, alpha = 0.9) +
+  scale_color_gradient2(
+    low = "#87CEEB",      # sky blue - more pronounced
+    mid = "#F0E68C",      # khaki - more pronounced
+    high = "#FFB6C1",     # light pink - more pronounced
+    midpoint = 0,         # center the gradient at x=0
+    guide = "none"
+  ) +
+  # Bell curve outline
+  geom_line(color = "gray70", linewidth = 3, alpha = 0.9) +
+  # Visual thresholds (commented out - using gradient colors instead)
+  geom_vline(xintercept = c(t_low, t_high), linetype = "dashed",
+             linewidth = 1.2, color = c("#5DADE2", "#E57373"), alpha = 0.6) +
+  # Patient line
+  annotate("segment", x = patient_x, xend = patient_x,
+           y = 0, yend = max_y, color = patient_line_color, linewidth = 2.5) +
+  annotate("text", x = patient_x + 0.05, y = max_y * 0.92, label = patient_id,
+           color = "black", size = 6, hjust = 0, vjust = 0.5) +
+  # Human icons near x-axis
+  annotate("text", x = -2.5, y = max_y * 0.25, label = if(use_fontawesome) "\uf007" else "●",
            family = if(use_fontawesome) "FontAwesome" else "sans",
-           size = 8, color = "blue") +
-  annotate("text", x = -0.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+           size = 10, color = "#87CEEB") +  # sky blue - same as gradient
+  annotate("text", x = -0.5, y = max_y * 0.25, label = if(use_fontawesome) "\uf007" else "●",
            family = if(use_fontawesome) "FontAwesome" else "sans",
-           size = 8, color = "gray50") +
-  annotate("text", x = 0, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
-           family = if(use_fontawesome) "FontAwesome" else  "sans",
-           size = 8, color = "gray50") +
-  annotate("text", x = 0.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+           size = 9, color = "gray50") +
+  annotate("text", x = 0, y = max_y * 0.25, label = if(use_fontawesome) "\uf007" else "●",
            family = if(use_fontawesome) "FontAwesome" else "sans",
-           size = 8, color = "gray50") +
-  annotate("text", x = 2.5, y = 0.1, label = if(use_fontawesome) "\uf007" else "●", 
+           size = 9, color = "gray50") +
+  annotate("text", x = 0.5, y = max_y * 0.25, label = if(use_fontawesome) "\uf007" else "●",
            family = if(use_fontawesome) "FontAwesome" else "sans",
-           size = 8, color = "red") +
-  # Patient marker icon - positioned at bell curve height
-  annotate("text", x = qnorm(patient_percentile/100), y = 0.4, 
-           label = if(use_fontawesome) "\uf007" else "●", 
+           size = 9, color = "gray50") +
+  annotate("text", x = 2.5, y = max_y * 0.25, label = if(use_fontawesome) "\uf007" else "●",
            family = if(use_fontawesome) "FontAwesome" else "sans",
-           size = 12, color = "red") +
-  # Risk labels - positioned below the icons
-  annotate("text", x = -2.5, y = 0.05, label = "Lower Risk", size = 4) +
-  annotate("text", x = 0, y = 0.05, label = "Average Risk", size = 4) +
-  annotate("text", x = 2.5, y = 0.05, label = "Higher Risk", size = 4) +
-  # Text below the red patient marker line
-  annotate("text", x = qnorm(patient_percentile/100), y = 0.45, 
-           label = paste0("Your polygenic score is in the ", round(patient_percentile), "th percentile"), 
-           color = "black", size = 4) +
-  # Limit y-axis to include text and remove axis ticks
-  scale_y_continuous(limits = c(0, 0.5)) +
-  # Publication theme without grids and axis ticks
-  theme_pubr(base_size = 16) +
+           size = 10, color = "#FFB6C1") +  # light pink - same as gradient
+  # Risk labels (single line to avoid odd breaks)
+  annotate("text", x = -2.75, y = max_y * 0.55,
+           label = "Fewer individuals have decreased risk",
+           size = 6, color = "#4575b4") +
+  annotate("text", x = 0, y = max_y * 0.55,
+           label = "Most individuals have average risk",
+           size = 6, color = "gray30") +
+  annotate("text", x = 2.75, y = max_y * 0.55,
+           label = "Fewer individuals have increased risk",
+           size = 6, color = "#d73027") +
+  # Scales and theme
+  scale_y_continuous(limits = c(0, max_y), expand = expansion(mult = c(0, 0))) +
+  scale_x_continuous(
+    limits = c(-4, 4),
+    breaks = qnorm(c(0, 0.05, 0.20, 0.50, 0.80, 0.95, 0.99)),
+    labels = c("0", "5th", "20th", "50th", "80th", "95th", "99th")
+  ) +
+  theme_pubr(base_size = 22) +
   theme(
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
@@ -225,8 +250,8 @@ df_plot +
     axis.ticks.y = element_blank(),
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank(),
-    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-    plot.subtitle = element_text(size = 14, hjust = 0.5)
+    plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 18, hjust = 0.5)
   ) +
   labs(
     title = paste("Polygenic Risk Score:", test_pgs_id),
@@ -282,7 +307,7 @@ ggplot() +
   geom_text(aes(x = patient_percentile, y = 1.5), 
             label = if(use_fontawesome) "\uf007" else "●", 
             family = if(use_fontawesome) "FontAwesome" else "sans",
-            size = 16, color = risk_info$color) +
+            size = 16, color = "black") +
   
   # Risk labels below
   geom_text(aes(x = 10, y = -0.3), label = "Lower risk", 

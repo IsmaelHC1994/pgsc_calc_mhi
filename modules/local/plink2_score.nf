@@ -58,8 +58,8 @@ process PLINK2_SCORE {
     if (scoremeta.n_scores.toInteger() == 1)
         """
         plink2 \
-            --threads 2 \
-            --memory 6000 \
+            --threads $task.cpus \
+            --memory $mem_mb \
             --seed 31 \
             --extract $scorefile \
             $load_afreq \
