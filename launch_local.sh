@@ -10,9 +10,9 @@ mkdir -p logs
 LOG_FILE="logs/pgsc_calc_local_$(date +%Y-%m-%d_%H-%M-%S).log"
 
 # Run the Nextflow command and pipe output to tee for both display and logging
-nextflow run main_with_gvcf.nf \
+nextflow run main_with_gvcf_alt.nf \
     -profile docker \
-    --gvcf_files "/home/ihc/tmp/hiro_pgsc_bak/24-1979.hard-filtered.gvcf.gz /home/ihc/tmp/hiro_pgsc_bak/24-1550i.hard-filtered.gvcf.gz" \
+    --gvcf_files "/home/ihc/tmp/hiro_pgsc_bak/24-1979-chr22.gvcf.gz /home/ihc/tmp/hiro_pgsc_bak/24-1550i-chr22.hard-filtered.gvcf.gz" \
     --reference_genome /home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/hg38.fa.gz \
     --sampleset gvcfTest2Multiple \
     --pgs_id PGS000016,PGS000768 \
@@ -27,7 +27,7 @@ nextflow run main_with_gvcf.nf \
     -resume \
     -with-trace MHI_local_$(date +%Y%m%d_%H%M%S).txt 2>&1 | tee "${LOG_FILE}" 
     
-# 
+    # --gvcf_files "/home/ihc/tmp/hiro_pgsc_bak/24-1979.hard-filtered.gvcf.gz /home/ihc/tmp/hiro_pgsc_bak/24-1550i.hard-filtered.gvcf.gz" \
     # --scorefile_custom "/home/ihc/codebase/mhi-prs/run_pgsc_2_01/assets/qc/scores/scores.tar.gz" \
     # --report_template "/home/ihc/codebase/mhi-prs/run_pgsc_2_01/bin/patient_report_template.qmd" \
     # --pgs_id "PGS004862" \

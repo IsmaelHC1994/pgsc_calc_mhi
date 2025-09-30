@@ -6,6 +6,8 @@ process COMBINE_FINAL_VCFS {
     // Store in genotypes_cache like pgscalc does
     cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
     storeDir cachedir / "gvcf" / "multisample"
+    
+    publishDir "${params.outdir}/${params.sampleset}/gvcf/multisample", mode: 'copy', overwrite: true, enabled: false
 
     input:
     path vcf_files

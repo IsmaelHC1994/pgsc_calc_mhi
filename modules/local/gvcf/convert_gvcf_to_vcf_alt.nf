@@ -6,6 +6,8 @@ process CONVERT_GVCF_TO_VCF {
     // Store in genotypes_cache like pgscalc does
     cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
     storeDir cachedir / "gvcf" / "converted"
+    
+    publishDir "${params.outdir}/${params.sampleset}/gvcf/converted", mode: 'copy', overwrite: true, enabled: false
 
     input:
     tuple path(gvcf_file), path(reference_genome), path(reference_vcf), path(reference_vcf_index)
