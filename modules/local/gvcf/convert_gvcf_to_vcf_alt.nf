@@ -19,7 +19,6 @@ process CONVERT_GVCF_TO_VCF {
     def output_name = "${sample_name}.pgsc.vcf.gz"
     """
     #!/bin/bash
-    set -euo pipefail
     exec 2> process_stderr.log
     
     echo "=== Step 2: Converting gVCF to VCF with Proper Formatting ==="
@@ -45,18 +44,7 @@ process CONVERT_GVCF_TO_VCF {
     bcftools sort --output-type z --write-index --output "${output_name}"
     ) 2> step2.bcftools.log
     
-    # Verify output file was created successfully
-    if [[ ! -f "${output_name}" ]]; then
-        echo "ERROR: Output VCF file was not created: ${output_name}"
-        cat step2.bcftools.log
-        exit 1
-    fi
-    
-    # Create index if it doesn't exist
-    if [[ ! -f "${output_name}.tbi" ]]; then
-        tabix -f -p vcf "${output_name}"
-    fi
-    
+    tabix -f -p vcf "${output_name}"
     echo "gVCF conversion completed successfully"
     echo "Total positions in processed VCF: \$(bcftools view -H "${output_name}" | wc -l)"
     echo "File size: \$(ls -lh "${output_name}" | awk '{print \$5}')"

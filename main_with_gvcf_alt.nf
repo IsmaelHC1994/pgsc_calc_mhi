@@ -44,7 +44,7 @@ process COLLECT_SCOREFILES {
 // Process to generate reports using PGSC_CALC outputs
 process GENERATE_REPORTS {
     label 'process_low'
-    container = 'docker.io/ismaelhc94/pgsc-mhi-report'
+    container = 'docker.io/ismaelhc94/pgsc-mhi-report:dev'
     publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
     
     input:
