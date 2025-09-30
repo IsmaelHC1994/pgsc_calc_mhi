@@ -1,7 +1,7 @@
 process MERGE_WITH_REFERENCE {
     label 'process_high'
     container = 'docker.io/ismaelhc94/pgsc-mhi-report:dev'
-    tag "Merging processed VCF with reference to fill missing variants"
+    tag "${processed_vcf.baseName}"
     publishDir "${params.outdir}/${params.sampleset}/gvcf/merged", mode: 'copy', overwrite: true
     
     input:
@@ -11,15 +11,15 @@ process MERGE_WITH_REFERENCE {
     path reference_vcf_index
     
     output:
-    path "*.pgsc.hg38.vcf.gz", emit: final_vcf
-    path "*.pgsc.hg38.vcf.gz.tbi", emit: final_vcf_index
+    path "*.merged.vcf.gz", emit: final_vcf
+    path "*.merged.vcf.gz.tbi", emit: final_vcf_index
     path "merge_summary.txt", emit: summary
     path "versions.yml", emit: versions
     
     script:
     def processed_vcf_basename = "${processed_vcf}".tokenize('/').last()
     def sample_name = processed_vcf_basename.replaceAll(/\\.pgsc\\.vcf\\.gz$/, '')
-    def output_name = "${sample_name}.pgsc.hg38.vcf.gz"
+    def output_name = "${sample_name}.merged.vcf.gz"
     """
     #!/bin/bash
     exec 2> process_stderr.log

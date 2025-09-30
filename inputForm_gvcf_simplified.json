@@ -8,7 +8,7 @@
       "dataFilter": {
         "dataType": "file"
       },
-      "maxValues": 1,
+      "maxValues": 5,
       "minValues": 1
      },
 
@@ -35,6 +35,17 @@
       "helpText": "Name identifier for this sample set (e.g. 'cohort1' 'run20250929'). Must not contain spaces or reserved characters (eg. _, -, .).",
       "type": "textbox",
       "value": ""
+    },
+    {
+      "id": "run_ancestry",
+      "label": "run_ancestry",
+      "helpText": "Path to reference database. Must be set to adjust for genetic ancestry differences between the scoring file and target genomes.",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 1
     },
     {
       "id": "report_template",
@@ -152,17 +163,6 @@
       "label": "Reference options",
       "helpText": "Define how genomes and variants in REFERENCE panel are defined and processed for PCA",
       "type": "section"
-    },
-    {
-      "id": "run_ancestry",
-      "label": "run_ancestry",
-      "helpText": "Path to reference database. Must be set to adjust for genetic ancestry differences between the scoring file and target genomes.",
-      "type": "data",
-      "dataFilter": {
-        "dataType": "file"
-      },
-      "maxValues": 1,
-      "minValues": 1
     },
     {
       "id": "geno_ref",

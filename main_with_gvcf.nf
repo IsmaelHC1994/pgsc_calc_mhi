@@ -78,8 +78,22 @@ process GENERATE_REPORTS {
     Rscript --vanilla -e "
     library(tidyverse)
     library(quarto)
-    
+
     template_file <- 'working_patient_report_template.qmd'
+    # Check if template file exists
+    if (file.exists(file.path('.', template_file))) {
+      print(paste('Template file exists:', file.path('.', template_file)))
+    } else {
+      print(paste('Template file does not exist:', file.path('.', template_file)))
+    }
+
+    # Check if fontawesome file exists
+    if (file.exists(file.path('.', fontawesome-webfont.ttf))) {
+      print(paste('FontAwesome file exists:', file.path('.', fontawesome-webfont.ttf)))
+    } else {
+      print(paste('FontAwesome file does not exist:', file.path('.', fontawesome-webfont.ttf)))
+    }
+    
     
     # Load the data to get patient IDs - handle gzipped files directly
     scores <- read_tsv(gzfile(list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]))
@@ -95,8 +109,7 @@ process GENERATE_REPORTS {
       mutate(Overall_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
       group_by(MostSimilarPop) %>%
       mutate(Population_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
-      ungroup() %>%
-      head(2)
+      ungroup()
     
     # Get list of all patient IDs
     all_patient_ids <- unique(run_patient_data\\\$simple_id)

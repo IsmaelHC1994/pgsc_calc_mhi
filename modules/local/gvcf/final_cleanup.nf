@@ -1,7 +1,7 @@
 process FINAL_CLEANUP {
     label 'process_medium'
     container = 'docker.io/ismaelhc94/pgsc-mhi-report:dev'
-    tag "Final cleanup: fixing malformed GT fields and filtering variants"
+    tag "${merged_vcf.baseName}"
     publishDir "${params.outdir}/${params.sampleset}/gvcf/final", mode: 'copy', overwrite: true
     
     input:
@@ -16,7 +16,7 @@ process FINAL_CLEANUP {
     
     script:
     def merged_vcf_basename = "${merged_vcf}".tokenize('/').last()
-    def sample_name = merged_vcf_basename.replaceAll(/\\.pgsc.*\\.vcf\\.gz$/, '')
+    def sample_name = merged_vcf_basename.replaceAll(/\\.merged\\.vcf\\.gz$/, '')
     def output_name = "${sample_name}_pgsc_ready.vcf.gz"
     """
     #!/bin/bash

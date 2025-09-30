@@ -134,9 +134,10 @@ include { PLINK2_VCF } from '../modules/local/plink2_vcf'
 
 // Import gVCF processing modules
 include { PREPARE_REFERENCE_VCF } from '../modules/local/gvcf/prepare_reference_vcf'
-include { CONVERT_GVCF_TO_VCF } from '../modules/local/gvcf/convert_gvcf_to_vcf'
+include { CONVERT_GVCF_TO_VCF } from '../modules/local/gvcf/convert_gvcf_to_vcf_alt'
 include { MERGE_WITH_REFERENCE } from '../modules/local/gvcf/merge_with_reference'
 include { FINAL_CLEANUP } from '../modules/local/gvcf/final_cleanup'
+include { COMBINE_FINAL_VCFS } from '../modules/local/gvcf/combine_final_vcfs_alt'
 
 include { BOOTSTRAP_ANCESTRY   } from '../subworkflows/local/ancestry/bootstrap_ancestry'
 include { INPUT_CHECK          } from '../subworkflows/local/input_check'
@@ -199,22 +200,17 @@ workflow PGSCCALC {
         // Step 1: Prepare reference VCF with null_sample
         PREPARE_REFERENCE_VCF(ch_reference_db)
 
-        // IMPORTANT: Create reference channels that can be consumed multiple times
-        // Use .collect() to make channels reusable across multiple processes
-        ch_ref_genome = Channel.fromPath(params.reference_genome).collect()
-        ch_ref_vcf = PREPARE_REFERENCE_VCF.out.reference_vcf.collect()
-        ch_ref_idx = PREPARE_REFERENCE_VCF.out.reference_vcf_index.collect()
-
         // Step 2: Convert gVCF to VCF with proper formatting (process each gVCF individually)
-        // Combine each gVCF file with reference channels
+        ch_ref_genome = Channel.fromPath(params.reference_genome).first()
+        ch_ref_vcf = PREPARE_REFERENCE_VCF.out.reference_vcf.first()
+        ch_ref_idx = PREPARE_REFERENCE_VCF.out.reference_vcf_index.first()
+        
         ch_gvcf_with_refs = ch_gvcf_files
             .combine(ch_ref_genome)
             .combine(ch_ref_vcf)
             .combine(ch_ref_idx)
 
-        CONVERT_GVCF_TO_VCF(
-            ch_gvcf_with_refs
-        )
+        CONVERT_GVCF_TO_VCF(ch_gvcf_with_refs)
         
         // Step 3: Merge with reference to fill missing variants
         MERGE_WITH_REFERENCE(
@@ -226,59 +222,36 @@ workflow PGSCCALC {
         
         // Step 4: Final cleanup - fix malformed GT fields and filter variants
         // Debug: Check what's going into FINAL_CLEANUP
-        MERGE_WITH_REFERENCE.out.final_vcf.map { it.getName() }.view { "merge_output_vcf: ${it}" }
-        MERGE_WITH_REFERENCE.out.final_vcf_index.map { it.getName() }.view { "merge_output_idx: ${it}" }
-        
         FINAL_CLEANUP(
             MERGE_WITH_REFERENCE.out.final_vcf,
             MERGE_WITH_REFERENCE.out.final_vcf_index
         )
         
-        // Debug: Check what's coming out of FINAL_CLEANUP
-        FINAL_CLEANUP.out.final_vcf.map { it.getName() }.view { "cleanup_output_vcf: ${it}" }
+        // Collect per-sample outputs to build multisample VCF
+        ch_final_vcf_list = FINAL_CLEANUP.out.final_vcf.collect()
+        ch_final_vcf_index_list = FINAL_CLEANUP.out.final_vcf_index.collect()
 
-        // Use FINAL_CLEANUP output instead of MERGE_WITH_REFERENCE
-        ch_final_vcf_run = FINAL_CLEANUP.out.final_vcf
-        // Debug: show final VCF files that will proceed downstream
-        ch_final_vcf_run.map { it.getName() }.view { "final_vcf: ${it}" }
-        
-        // Debug: Count how many final VCF files we have
-        ch_final_vcf_run.count().view { "Total final VCF files: ${it}" }
+        COMBINE_FINAL_VCFS(
+            ch_final_vcf_list,
+            ch_final_vcf_index_list
+        )
 
-        // Convert processed VCF to PLINK2 pgen format with unique sample names
-        // Add index to ensure each sample is unique even if names are similar
-        ch_vcf_for_pgscalc = ch_final_vcf_run.toList().flatMap { vcf_files ->
-            vcf_files.withIndex().collect { vcf_file, index -> 
-                [vcf_file, index]
-            }
-        }.map { vcf_file, index ->
-            // Extract unique sample name from VCF filename
-            def filename = vcf_file.toString().tokenize('/').last()
-            log.info "Processing VCF file: ${filename}"
-            
-            // Simple sample naming: sampleset + incremental number
-            def sample_name = "${params.sampleset}${index + 1}"
-            
-            log.info "Sample name: '${filename}' -> '${sample_name}'"
-            def meta = [ 
-                id: sample_name, 
-                chrom: 'ALL', 
+        // Create single multisample VCF channel for downstream processing
+        ch_multisample_vcf = COMBINE_FINAL_VCFS.out.multisample_vcf.map { dataset_id, vcf, vcf_index ->
+            def meta = [
+                id: dataset_id,
+                chrom: 'ALL',
                 build: (params.target_build ?: 'GRCh38'),
-                // Each sample is its own independent sampleset
-                sampleset: sample_name,
-                is_pfile: false,  // Will be set to true after PLINK2_VCF
-                sample_index: index  // Track original index
+                sampleset: dataset_id,
+                is_pfile: false
             ]
-            log.info "Created meta for sample: ${meta}"
-            [ meta, file(vcf_file) ]
+            [ meta, vcf ]
         }
-        
-        // Debug: show PLINK inputs as [meta.id, filename]
-        ch_vcf_for_pgscalc.map { meta, v -> [meta.id, v.getName()] }.view { "plink_inputs: ${it}" }
 
-        PLINK2_VCF(ch_vcf_for_pgscalc)
+        // Convert multisample VCF to PLINK2 pgen format
+        PLINK2_VCF( ch_multisample_vcf )
         
-        // Build genotype tuple for downstream processing
+        // Build genotype tuple for downstream processing from single multisample pgen
         ch_geno_tuple = PLINK2_VCF.out.pgen
             .join(PLINK2_VCF.out.psam)
             .join(PLINK2_VCF.out.pvar)
@@ -408,9 +381,9 @@ workflow PGSCCALC {
             ch_variants_direct.view { "DEBUG MAKE_COMPATIBLE variants input: ${it}" }
             ch_vcf_direct.view { "DEBUG MAKE_COMPATIBLE vcf input: ${it}" }
             
-            // Pass gVCF-derived data through MAKE_COMPATIBLE for proper relabeling
-            // This ensures PLINK2_RELABELPVAR processes the data correctly
-            // Pass empty VCF channel since we already have processed data
+            // Pass multisample gVCF-derived data through MAKE_COMPATIBLE for proper relabeling
+            // This ensures PLINK2_RELABELPVAR processes the multisample data correctly
+            // Pass empty VCF channel since we already have processed multisample data
             MAKE_COMPATIBLE (
                 ch_geno_direct,
                 ch_pheno_direct,
@@ -439,10 +412,10 @@ workflow PGSCCALC {
             ref_pheno = Channel.empty()
             ref_var = Channel.empty()
 
-            // Debug: Check what's going into ANCESTRY_PROJECT
-            MAKE_COMPATIBLE.out.geno.view { "ANCESTRY geno input: ${it}" }
-            MAKE_COMPATIBLE.out.pheno.view { "ANCESTRY pheno input: ${it}" }
-            MAKE_COMPATIBLE.out.variants.view { "ANCESTRY variants input: ${it}" }
+            // Debug: Check what's going into ANCESTRY_PROJECT (multisample data)
+            MAKE_COMPATIBLE.out.geno.view { "ANCESTRY multisample geno input: ${it}" }
+            MAKE_COMPATIBLE.out.pheno.view { "ANCESTRY multisample pheno input: ${it}" }
+            MAKE_COMPATIBLE.out.variants.view { "ANCESTRY multisample variants input: ${it}" }
 
             ANCESTRY_PROJECT (
                 MAKE_COMPATIBLE.out.geno,

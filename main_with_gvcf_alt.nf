@@ -1,10 +1,10 @@
 #!/usr/bin/env nextflow
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    pgscatalog/pgsc_calc (fork - MHI (QC+REPORT))
+    pgscatalog/pgsc_calc (fork - MHI (QC+REPORT)) + gVCF Processing
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Github : 
-    Docs   : 
+    Enhanced version that can process gVCF files directly into PGS-ready VCFs
+    before running the standard pgscalc workflow.
 ----------------------------------------------------------------------------------------
 */
 
@@ -16,25 +16,8 @@ nextflow.enable.dsl = 2
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-// Import conversion module (VCF -> PLINK2 pgen)
-include { PLINK2_VCF } from './modules/local/plink2_vcf'
-include { PGSCCALC } from './workflows/pgsc_calc'
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    VALIDATE & PRINT PARAMETER SUMMARY
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
-
-// include { paramsHelp } from 'plugin/nf-schema'
-
-// // Print help message if needed
-// if (params.help) {
-//     log.info paramsHelp("nextflow run pgscatalog/pgsc_calc --input input_file.csv")
-//     log.info "See https://pgsc-calc.readthedocs.io/en/latest/getting-started.html for more help"
-//     exit 0
-// }
-
-// WorkflowMain.initialise(workflow, params, log, args)
+// Import existing pgscalc modules
+include { PGSCCALC } from './workflows/pgsc_calc_alt'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -139,6 +122,13 @@ process GENERATE_REPORTS {
     } else {
       print(paste('Template file does not exist:', file.path('.', template_file)))
     }
+
+    # Check if fontawesome file exists
+    if (file.exists(file.path('.', fontawesome-webfont.ttf))) {
+      print(paste('FontAwesome file exists:', file.path('.', fontawesome-webfont.ttf)))
+    } else {
+      print(paste('FontAwesome file does not exist:', file.path('.', fontawesome-webfont.ttf)))
+    }
     
     # Render report for each patient
     for (pid in all_patient_ids) {
@@ -163,9 +153,14 @@ process GENERATE_REPORTS {
       pop_path <- list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]
       scores_all <- read_tsv(gzfile(pgs_path))
       # Extract base PGS ID from full PGS column (e.g., PGS000016_hmPOS_GRCh38 -> PGS000016)
+      # For custom scores like brugadaMTAGnoOverlap, extract the base name before 'noOverlap'
       scores_all_with_base <- scores_all %>%
-        dplyr::mutate(PGS_base = stringr::str_extract(PGS, '^[^_]+'))
-      scores_sub <- dplyr::filter(scores_all_with_base, PGS_base %in% subset_vec, sampleset != 'reference')
+        dplyr::mutate(PGS_base = dplyr::case_when(
+          stringr::str_detect(PGS, '^PGS[0-9]+') ~ stringr::str_extract(PGS, '^[^_]+'),
+          stringr::str_detect(PGS, 'noOverlap\\\$') ~ stringr::str_remove(PGS, 'noOverlap\\\$'),
+          TRUE ~ PGS
+        ))
+      scores_sub <- dplyr::filter(scores_all_with_base, PGS_base %in% subset_vec)
       if (nrow(scores_sub) == 0) {
         warning('No rows found for requested subset scores; skipping subset report')
       } else {
@@ -199,7 +194,16 @@ process GENERATE_REPORTS {
             )
           )
         writeLines(subset_text_data\\\$Summary, subset_summary_file)
+        
+        # Copy FontAwesome font and template to subset folder
+        if (file.exists('fontawesome-webfont.ttf')) {
+          file.copy('fontawesome-webfont.ttf', 'subset/fontawesome-webfont.ttf', overwrite = TRUE)
+          message('FontAwesome font copied to subset folder')
+        } else {
+          warning('FontAwesome font not found, subset reports may not display icons correctly')
+        }
         file.copy('working_patient_report_template.qmd', 'subset/working_patient_report_template.qmd', overwrite = TRUE)
+        
         # derive patient IDs from subset run (exclude HG00 references)
         ids <- run_patient_data_sub %>%
           dplyr::filter(!grepl('^HG00', IID)) %>%
@@ -220,12 +224,12 @@ process GENERATE_REPORTS {
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    RUN ALL WORKFLOWS
+    MAIN WORKFLOW
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-// Main workflow that runs both QC and PGSC_CALC in sequence
 workflow {
+    log.info "Starting PGSC_CALC with gVCF processing..."
     
     // Handle scorefile folder input if provided
     ch_collected_scorefiles = Channel.empty()
@@ -254,29 +258,13 @@ workflow {
               "  - scorefile (individual scoring file path)"
     }
     
-    // Step 1: Convert VCF to PLINK2 pgen using upstream module (no samplesheet)
-    ch_vcf = Channel
-        .fromPath(params.vcf_files)
-        .map { vcf_file ->
-            def meta = [ id: params.sampleset, chrom: 'ALL', build: (params.target_build ?: 'GRCh38') ]
-            [ meta, file(vcf_file) ]
-        }
-
-    PLINK2_VCF(ch_vcf)
-
-    // Step 2: Build genotype tuple for PGSCCALC
-    ch_geno_data = PLINK2_VCF.out.pgen
-        .join(PLINK2_VCF.out.psam)
-        .join(PLINK2_VCF.out.pvar)
-        .map { meta, pgen, psam, pvar -> [meta, pgen, psam, pvar] }
-    
     // log the ch_collected_scorefiles
     ch_collected_scorefiles.view { scorefile ->
         "ch_collected_scorefiles: scorefile=${scorefile}"
     }
     
-    // Pass null for samplesheet since we're using direct genotype data
-    PGSCCALC(Channel.value(null), ch_collected_scorefiles, ch_geno_data)
+    // Call PGSCCALC with gVCF processing integrated
+    PGSCCALC(ch_collected_scorefiles)
     
     // Step 3: Generate reports using both score files and ancestry results from PGSC_CALC
     // Extract just the file paths from the metadata tuples
@@ -288,18 +276,4 @@ workflow {
     
     // Generate reports using all results and the provided template
     GENERATE_REPORTS(all_result_files, file(params.report_template))
-
 }
-
-// Add a dedicated workflow for running just QC
-// RUN_QC_ONLY removed: using direct VCF->PGEN conversion path
-
-
-/*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    THE END
-    |\__/,|   (`\
-  _.|o o  |_   ) )
--(((---(((--------
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-*/
