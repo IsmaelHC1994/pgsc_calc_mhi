@@ -1,6 +1,6 @@
 process CONVERT_GVCF_TO_VCF {
     label 'process_high'
-    container = 'docker.io/ismaelhc94/pgsc-mhi-report:latest'
+    container = 'docker.io/ismaelhc94/pgsc-mhi-report:dev'
     tag "Converting gVCF to VCF with proper formatting for ancestry sites"
     publishDir "${params.outdir}/${params.sampleset}/gvcf/processed", mode: 'copy', overwrite: true
     
