@@ -37,8 +37,8 @@ library(knitr)
 
 # Set up FontAwesome
 use_fontawesome <- FALSE
-if (file.exists("./fontawesome-webfont.ttf")) {
-  font_add('FontAwesome', './fontawesome-webfont.ttf')
+if (file.exists("fontawesome-webfont.ttf")) {
+  font_add('FontAwesome', 'fontawesome-webfont.ttf')
   showtext_auto()
   use_fontawesome <- TRUE
   message("FontAwesome font loaded successfully")

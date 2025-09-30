@@ -36,8 +36,8 @@ library(knitr)      # For table formatting
 # Set up FontAwesome
 # Check if fonts exists in the same directory as the template
 use_fontawesome <- FALSE
-if (file.exists("./fontawesome-webfont.ttf")) {
-  font_add('FontAwesome', './fontawesome-webfont.ttf')
+if (file.exists("fontawesome-webfont.ttf")) {
+  font_add('FontAwesome', 'fontawesome-webfont.ttf')
   showtext_auto()
   use_fontawesome <- TRUE
   message("FontAwesome font loaded successfully")
@@ -109,8 +109,7 @@ scores_popsim <- scores_popsim %>%
   ungroup()
 
 run_patient_data <- scores_popsim %>%
-  filter(sampleset != "reference") %>%
-  head(64) # FIXME: should not matter, no more than 64 patients in the reference set should be present
+  filter(sampleset != "reference")
 
 # Get reference data
 reference_data <- scores_popsim %>% filter(sampleset == "reference")
@@ -144,8 +143,13 @@ patient_pgs_list <- scores_popsim %>%
   pull(PGS) %>%
   unique()
 
-# Create bulleted list of PRS scores
-pgs_bullet_list <- paste0("- **", patient_pgs_list, "**", collapse = "\n")
+# Create bulleted list of PRS scores with formatted names
+# Format: PGS000016_hmPOS_GRCh38 -> PGS000016 (GRCh38)
+formatted_pgs_list <- patient_pgs_list %>%
+  str_replace("^(PGS\\d+).*_(GRCh\\d+)$", "\\1 (\\2)") %>%
+  str_replace("^(PGS\\d+).*", "\\1")  # fallback for other formats
+
+pgs_bullet_list <- paste0("- **", formatted_pgs_list, "**", collapse = "\n")
 ```
 
 
