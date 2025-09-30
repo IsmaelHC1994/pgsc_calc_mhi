@@ -3,11 +3,7 @@ process COMBINE_FINAL_VCFS {
     container 'docker.io/ismaelhc94/pgsc-mhi-report:dev'
     tag "Combining ${vcf_files.size()} VCFs into multisample VCF"
     
-    // Store in genotypes_cache like pgscalc does
-    cachedir = params.genotypes_cache ? file(params.genotypes_cache) : workDir
-    storeDir cachedir / "gvcf" / "multisample"
-    
-    publishDir "${params.outdir}/${params.sampleset}/gvcf/multisample", mode: 'copy', overwrite: true, enabled: false
+    publishDir "${params.outdir}/${params.sampleset}/gvcf/multisample", mode: 'copy', overwrite: true
 
     input:
     path vcf_files
