@@ -18,6 +18,7 @@ nextflow run "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/main_with_gvcf.nf" \
     -profile apptainer,narval \
     --sampleset gvcfTestsingle \
     --gvcf_files "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/24-1979.hard-filtered.gvcf.gz" \
+    --gvcf_index "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/24-1979.hard-filtered.gvcf.gz.tbi" \
     --reference_genome "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/hg38.fa.gz" \
     --scorefile_custom "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/scores/scores.tar.gz" \
     --report_template "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/bin/patient_report_template.qmd" \

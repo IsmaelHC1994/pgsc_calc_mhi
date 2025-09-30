@@ -165,10 +165,12 @@ workflow PGSCCALC {
         // Create channels for gVCF processing
         ch_reference_db = Channel.fromPath(params.run_ancestry)
         ch_gvcf_files = Channel.fromPath(params.gvcf_files)
+        ch_gvcf_index = Channel.fromPath(params.gvcf_index)
         ch_reference_genome = Channel.fromPath(params.reference_genome)
         
         log.info "Reference DB: ${params.run_ancestry}"
         log.info "gVCF Files: ${params.gvcf_files}"
+        log.info "gVCF Index: ${params.gvcf_index}"
         log.info "Reference Genome: ${params.reference_genome}"
         
         // Step 1: Prepare reference VCF with null_sample
@@ -177,6 +179,7 @@ workflow PGSCCALC {
         // Step 2: Convert gVCF to VCF with proper formatting
         CONVERT_GVCF_TO_VCF(
             ch_gvcf_files,
+            ch_gvcf_index,
             ch_reference_genome,
             PREPARE_REFERENCE_VCF.out.reference_vcf,
             PREPARE_REFERENCE_VCF.out.reference_vcf_index
