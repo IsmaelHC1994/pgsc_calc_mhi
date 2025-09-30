@@ -13,10 +13,10 @@ module load nextflow
 module load apptainer
 
 # Run the Nextflow command and pipe output to tee for both display and logging
-nextflow run main_with_gvcf.nf \
+nextflow run main_with_gvcf_alt.nf \
     -c nextflow.config \
     -profile apptainer,narval \
-    --sampleset gvcfTest \
+    --sampleset gvcfTestmultiple \
     --gvcf_files "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/24-1550i.hard-filtered.gvcf.gz" \
     --reference_genome "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/hg38.fa.gz" \
     --scorefile_custom "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/scores/scores.tar.gz" \
