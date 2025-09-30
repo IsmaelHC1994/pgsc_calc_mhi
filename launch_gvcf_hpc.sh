@@ -17,7 +17,7 @@ nextflow run main_with_gvcf_alt.nf \
     -c nextflow.config \
     -profile apptainer,narval \
     --sampleset gvcfTestmultiple \
-    --gvcf_files "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/24-1550i.hard-filtered.gvcf.gz" \
+    --gvcf_files "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/24-1550i.hard-filtered.gvcf.gz /home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/24-1979.hard-filtered.gvcf.gz" \
     --reference_genome "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/hg38.fa.gz" \
     --scorefile_custom "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/scores/scores.tar.gz" \
     --report_template "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/bin/patient_report_template.qmd" \
