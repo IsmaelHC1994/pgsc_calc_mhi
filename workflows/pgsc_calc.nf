@@ -295,8 +295,8 @@ workflow PGSCCALC {
         // Check if we have any source of scoring files
         // Note: We can't easily check scorefiles channel content here, so we'll be permissive
         // and let the downstream processes handle empty scorefiles gracefully
-        if (!params.scorefile && accessions.every { it.value == "" } && !params.scorefile_folder) {
-            Nextflow.error("No valid accessions or scoring files provided. Please double check --pgs_id, --pgp_id, --trait_efo, --scorefile, or --scorefile_folder parameters")
+        if (!params.scorefile && accessions.every { it.value == "" } && !params.scorefile_custom) {
+            Nextflow.error("No valid accessions or scoring files provided. Please double check --pgs_id, --pgp_id, --trait_efo, --scorefile, or --scorefile_custom parameters")
         }
 
         //
