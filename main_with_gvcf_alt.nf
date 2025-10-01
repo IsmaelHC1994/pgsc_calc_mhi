@@ -50,6 +50,7 @@ process GENERATE_REPORTS {
     input:
     path(result_files)
     path(report_template)
+    path(sample_pgs_mapping), stageAs: 'sample_pgs_mapping.csv'
     
     output:
     path "patient*.html"
@@ -71,8 +72,8 @@ process GENERATE_REPORTS {
     # Copy the provided template to work directory with a new name
     cp ${report_template} working_patient_report_template.qmd
     
-    # Expose optional subset scores to R
-    export SUBSET_SCORES='${params.target_scores_report ?: ''}'
+    # Expose sample PGS mapping file to R
+    export SAMPLE_PGS_MAPPING='${sample_pgs_mapping != 'NO_FILE' ? 'sample_pgs_mapping.csv' : ''}'
 
     # Run R script directly
     Rscript --vanilla -e "
@@ -144,46 +145,81 @@ process GENERATE_REPORTS {
       )
     }
 
-    # Optional: subset report generation if SUBSET_SCORES provided
-    subset_arg <- Sys.getenv('SUBSET_SCORES')
-    if (nzchar(subset_arg)) {
-      message('Subset scores requested: ', subset_arg)
-      subset_vec <- strsplit(subset_arg, ',')[[1]] |> trimws()
+    # Optional: subset report generation using CSV mapping
+    sample_pgs_mapping_file <- Sys.getenv('SAMPLE_PGS_MAPPING')
+    
+    if (nzchar(sample_pgs_mapping_file) && file.exists(sample_pgs_mapping_file)) {
+      message('Generating subset reports using CSV mapping: ', sample_pgs_mapping_file)
+      
       pgs_path <- list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]
       pop_path <- list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]
       scores_all <- read_tsv(gzfile(pgs_path))
-      # Extract base PGS ID from full PGS column (e.g., PGS000016_hmPOS_GRCh38 -> PGS000016)
-      # For custom scores like brugadaMTAGnoOverlap, extract the base name before 'noOverlap'
+      pop_all <- read_tsv(gzfile(pop_path))
+      
+      # Extract base PGS ID from full PGS column
       scores_all_with_base <- scores_all %>%
         dplyr::mutate(PGS_base = dplyr::case_when(
           stringr::str_detect(PGS, '^PGS[0-9]+') ~ stringr::str_extract(PGS, '^[^_]+'),
           stringr::str_detect(PGS, 'noOverlap\\\$') ~ stringr::str_remove(PGS, 'noOverlap\\\$'),
           TRUE ~ PGS
         ))
-      scores_sub <- dplyr::filter(scores_all_with_base, PGS_base %in% subset_vec)
-      if (nrow(scores_sub) == 0) {
-        warning('No rows found for requested subset scores; skipping subset report')
-      } else {
-        dir.create('subset', showWarnings = FALSE)
-        pop_all <- read_tsv(gzfile(pop_path))
-        # Reuse existing pipeline on the filtered scores
+      
+      # Load CSV mapping: sample_id,pgs_id1,pgs_id2,...
+      mapping_df <- read_csv(sample_pgs_mapping_file, col_names = FALSE, show_col_types = FALSE)
+      
+      # Create subset directory
+      dir.create('subset', showWarnings = FALSE)
+      
+      # Copy FontAwesome font and template to subset folder once
+      if (file.exists('fontawesome-webfont.ttf')) {
+        file.copy('fontawesome-webfont.ttf', 'subset/fontawesome-webfont.ttf', overwrite = TRUE)
+      }
+      file.copy('working_patient_report_template.qmd', 'subset/working_patient_report_template.qmd', overwrite = TRUE)
+      
+      # Collect all subset data across samples
+      all_subset_scores <- list()
+      all_subset_summaries <- list()
+      
+      # Process each sample individually
+      for (i in 1:nrow(mapping_df)) {
+        sample_prefix <- as.character(mapping_df[i, 1])
+        pgs_ids_for_sample <- as.character(mapping_df[i, -1]) %>% na.omit() %>% trimws()
+        
+        if (length(pgs_ids_for_sample) == 0) {
+          warning('No PGS IDs for sample ', sample_prefix, '; skipping')
+          next
+        }
+        
+        message('Processing subset for sample ', sample_prefix, ' with PGS IDs: ', paste(pgs_ids_for_sample, collapse = ', '))
+        
+        # Filter scores for this sample and requested PGS IDs
+        scores_sub <- scores_all_with_base %>%
+          dplyr::filter(
+            stringr::str_starts(IID, sample_prefix),
+            PGS_base %in% pgs_ids_for_sample
+          )
+        
+        if (nrow(scores_sub) == 0) {
+          warning('No rows found for sample ', sample_prefix, '; skipping')
+          next
+        }
+        
+        # Add to collection
+        all_subset_scores[[i]] <- scores_sub
+        
+        # Generate subset report for this sample
         scores_popsim_sub <- scores_sub %>%
           dplyr::left_join(pop_all %>% dplyr::select(IID, MostSimilarPop), by = 'IID') %>%
           dplyr::mutate(simple_id = stringr::str_extract(IID, '[^_]+\\\$'))
+        
         run_patient_data_sub <- scores_popsim_sub %>%
           dplyr::filter(sampleset != 'reference') %>%
           dplyr::mutate(Overall_Percentile = round(dplyr::percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
           dplyr::group_by(MostSimilarPop) %>%
           dplyr::mutate(Population_Percentile = round(dplyr::percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
           dplyr::ungroup()
-        # Write subset artifacts for publishing
-        readr::write_tsv(scores_sub, gzfile('subset/pgs.txt.gz'))
-        readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
-        # Filter out reference samples before writing CSV
-        scores_sub_filtered <- dplyr::filter(scores_sub, sampleset != 'reference')
-        readr::write_csv(scores_sub_filtered, 'subset/pgs_subset.csv')
-        # Save subset patient summaries
-        subset_summary_file <- file.path('subset', 'patient_summaries.csv')
+        
+        # Collect summaries
         subset_text_data <- run_patient_data_sub %>%
           dplyr::mutate(
             Summary = sprintf(
@@ -193,29 +229,37 @@ process GENERATE_REPORTS {
               Overall_Percentile
             )
           )
-        writeLines(subset_text_data\\\$Summary, subset_summary_file)
+        all_subset_summaries[[i]] <- subset_text_data\\\$Summary
         
-        # Copy FontAwesome font and template to subset folder
-        if (file.exists('fontawesome-webfont.ttf')) {
-          file.copy('fontawesome-webfont.ttf', 'subset/fontawesome-webfont.ttf', overwrite = TRUE)
-          message('FontAwesome font copied to subset folder')
-        } else {
-          warning('FontAwesome font not found, subset reports may not display icons correctly')
-        }
-        file.copy('working_patient_report_template.qmd', 'subset/working_patient_report_template.qmd', overwrite = TRUE)
-        
-        # derive patient IDs from subset run (exclude HG00 references)
+        # Generate subset reports for this sample's patients
         ids <- run_patient_data_sub %>%
           dplyr::filter(!grepl('^HG00', IID)) %>%
           dplyr::pull(simple_id) %>%
           unique()
+        
         if (length(ids) > 0) {
           owd <- getwd(); setwd('subset'); on.exit(setwd(owd), add = TRUE)
           for (pid in ids) {
-            message(sprintf('Generating subset reports for patient %s...', pid))
-            quarto::quarto_render('working_patient_report_template.qmd', output_file = paste0('patient_', pid, '_subset_report.html'), execute_params = list(patient_id = pid))
+            message(sprintf('Generating subset report for patient %s...', pid))
+            quarto::quarto_render('working_patient_report_template.qmd', 
+                                  output_file = paste0('patient_', pid, '_subset_report.html'), 
+                                  execute_params = list(patient_id = pid))
           }
+          setwd(owd)
         }
+      }
+      
+      # Write combined subset artifacts
+      if (length(all_subset_scores) > 0) {
+        combined_scores <- dplyr::bind_rows(all_subset_scores)
+        readr::write_tsv(combined_scores, gzfile('subset/pgs.txt.gz'))
+        readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
+        scores_sub_filtered <- dplyr::filter(combined_scores, sampleset != 'reference')
+        readr::write_csv(scores_sub_filtered, 'subset/pgs_subset.csv')
+        
+        # Write combined summaries
+        writeLines(unlist(all_subset_summaries), 'subset/patient_summaries.csv')
+        message('Subset reports generation completed')
       }
     }
     "
@@ -274,6 +318,11 @@ workflow {
     // Combine all files into a single channel
     all_result_files = score_files_channel.mix(ancestry_results_channel).collect()
     
+    // Prepare sample PGS mapping file (if provided)
+    ch_sample_pgs_mapping = params.sample_pgs_mapping ? 
+        Channel.fromPath(params.sample_pgs_mapping) : 
+        Channel.value(file('NO_FILE'))
+    
     // Generate reports using all results and the provided template
-    GENERATE_REPORTS(all_result_files, file(params.report_template))
+    GENERATE_REPORTS(all_result_files, file(params.report_template), ch_sample_pgs_mapping)
 }

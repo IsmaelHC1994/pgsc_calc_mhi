@@ -87,11 +87,15 @@
       "value": ""
     },
     {
-      "id": "target_scores_report",
-      "label": "Subset PGS IDs to generate an additional report",
-      "helpText": "Optional: comma-separated PGS IDs to produce an additional subset report and CSV (e.g., PGS000802,PGS000001). If a manual tar file is supplied, the score labels passed here must match the metadata in the tar file. Leave empty to skip.",
-      "type": "textbox",
-      "value": ""
+      "id": "sample_pgs_mapping",
+      "label": "Sample-to-PGS Mapping CSV (Upload)",
+      "helpText": "CSV file mapping sample IDs to specific PGS IDs for subset reports. Format: sample_id,pgs_id1,pgs_id2,... Each sample will get a subset report with only their specified PGS IDs.",
+      "type": "data",
+      "dataFilter": {
+        "dataType": "file"
+      },
+      "maxValues": 1,
+      "minValues": 0
     },
     {
       "id": "scorefile_custom",

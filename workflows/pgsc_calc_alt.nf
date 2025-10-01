@@ -317,8 +317,35 @@ workflow PGSCCALC {
             }
         }
 
+        // Parse sample-to-PGS mapping CSV if provided
+        def csv_pgs_ids = ""
+        if (params.sample_pgs_mapping) {
+            log.info "Parsing sample PGS mapping from: ${params.sample_pgs_mapping}"
+            def mapping_file = file(params.sample_pgs_mapping)
+            if (mapping_file.exists()) {
+                def all_pgs_ids = [] as Set
+                mapping_file.readLines().drop(1).each { line ->  // Skip header
+                    if (line.trim()) {
+                        def parts = line.split(',')
+                        if (parts.size() >= 2) {
+                            // Extract PGS IDs from second column onward
+                            def pgs_ids = parts[1..-1].collect { it.trim() }.findAll { it }
+                            all_pgs_ids.addAll(pgs_ids)
+                        }
+                    }
+                }
+                csv_pgs_ids = all_pgs_ids.join(' ')
+                log.info "Unique PGS IDs from CSV: ${csv_pgs_ids}"
+            } else {
+                log.warn "Sample PGS mapping file not found: ${params.sample_pgs_mapping}"
+            }
+        }
+        
+        // Merge CSV PGS IDs with params.pgs_id
+        def combined_pgs_id = [params.pgs_id, csv_pgs_ids].findAll { it }.join(' ')
+        
         // make sure accessions look sensible before querying PGS Catalog
-        def pgs_id = WorkflowPgscCalc.prepareAccessions(params.pgs_id, "pgs_id")
+        def pgs_id = WorkflowPgscCalc.prepareAccessions(combined_pgs_id, "pgs_id")
         def pgp_id = WorkflowPgscCalc.prepareAccessions(params.pgp_id, "pgp_id")
         
         // temporarily handle parameter synonym (--trait_efo -> --efo_id) 
