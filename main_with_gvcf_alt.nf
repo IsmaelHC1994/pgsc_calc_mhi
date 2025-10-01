@@ -316,19 +316,13 @@ process ORGANIZE_REPORTS {
     
     script:
     """
-    # Create directory structure
     mkdir -p overall_reports
     mkdir -p subset/subset_reports
     
-    # Move main reports to overall_reports
     for report in ${patient_reports}; do
         cp "\$report" overall_reports/
     done
     
-    # Copy patient summaries (already in correct location)
-    # cp ${patient_summaries} patient_summaries.csv
-    
-    # Move subset files if they exist
     if [ -n "${subset_reports}" ]; then
         for report in ${subset_reports}; do
             cp "\$report" subset/subset_reports/
