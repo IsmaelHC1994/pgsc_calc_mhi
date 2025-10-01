@@ -12,6 +12,13 @@ LOG_FILE="logs/pgsc_calc_gvcf_$(date +%Y-%m-%d_%H-%M-%S).log"
 module load nextflow
 module load apptainer
 
+# cvs example for testing
+cat > sample_mapping.csv << EOF
+sample_id,score1,score2
+24-1979,brugadaMTAG
+24-1550i,brugadaMTAG,hcmMTAG
+EOF
+
 # Run the Nextflow command and pipe output to tee for both display and logging
 nextflow run main_with_gvcf_alt.nf \
     -c nextflow.config \
@@ -20,6 +27,7 @@ nextflow run main_with_gvcf_alt.nf \
     --gvcf_files "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/24-1550i.hard-filtered.gvcf.gz /home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/24-1979.hard-filtered.gvcf.gz" \
     --reference_genome "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/hg38.fa.gz" \
     --scorefile_custom "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/scores/scores.tar.gz" \
+    --sample_pgs_mapping "sample_mapping.csv" \
     --report_template "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/bin/patient_report_template.qmd" \
     --target_build GRCh38 \
     --genotypes_cache cache \
