@@ -88,10 +88,10 @@ process GENERATE_REPORTS {
     }
 
     # Check if fontawesome file exists
-    if (file.exists(file.path('.', fontawesome-webfont.ttf))) {
-      print(paste('FontAwesome file exists:', file.path('.', fontawesome-webfont.ttf)))
+    if (file.exists(file.path('.', 'fontawesome-webfont.ttf'))) {
+      print(paste('FontAwesome file exists:', file.path('.', 'fontawesome-webfont.ttf')))
     } else {
-      print(paste('FontAwesome file does not exist:', file.path('.', fontawesome-webfont.ttf)))
+      print(paste('FontAwesome file does not exist:', file.path('.', 'fontawesome-webfont.ttf')))
     }
     
     
