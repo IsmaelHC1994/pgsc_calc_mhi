@@ -242,22 +242,28 @@ process GENERATE_REPORTS {
           )
         all_subset_summaries[[i]] <- subset_text_data\\\$Summary
         
-        # Generate subset reports for this sample's patients
-        ids <- run_patient_data_sub %>%
-          dplyr::filter(!grepl('^HG00', IID)) %>%
-          dplyr::pull(simple_id) %>%
-          unique()
-        
-        if (length(ids) > 0) {
-          owd <- getwd(); setwd('subset'); on.exit(setwd(owd), add = TRUE)
-          for (pid in ids) {
-            message(sprintf('Generating subset report for patient %s...', pid))
-            quarto::quarto_render('working_patient_report_template.qmd', 
-                                  output_file = paste0('patient_', pid, '_subset_report.html'), 
-                                  execute_params = list(patient_id = pid))
-          }
-          setwd(owd)
+      # Write temporary data files for this sample's subset reports
+      # Note: We write the full pop_all because popsimilarity is independent of PGS scores
+      # and the template needs it for all reference samples to calculate percentiles
+      readr::write_tsv(scores_sub, gzfile('subset/pgs.txt.gz'))
+      readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
+      
+      # Generate subset reports for this sample's patients
+      ids <- run_patient_data_sub %>%
+        dplyr::filter(!grepl('^HG00', IID)) %>%
+        dplyr::pull(simple_id) %>%
+        unique()
+      
+      if (length(ids) > 0) {
+        owd <- getwd(); setwd('subset'); on.exit(setwd(owd), add = TRUE)
+        for (pid in ids) {
+          message(sprintf('Generating subset report for patient %s...', pid))
+          quarto::quarto_render('working_patient_report_template.qmd', 
+                                output_file = paste0('patient_', pid, '_subset_report.html'), 
+                                execute_params = list(patient_id = pid))
         }
+        setwd(owd)
+      }
       }
       
       # Write combined subset artifacts
