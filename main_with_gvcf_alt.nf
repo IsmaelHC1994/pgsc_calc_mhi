@@ -78,6 +78,9 @@ process GENERATE_REPORTS {
     
     # Copy the provided template to work directory with a new name
     cp ${report_template} working_patient_report_template.qmd
+
+    template_file <- 'working_patient_report_template.qmd'
+    sample_pgs_mapping_file <- 'sample_pgs_mapping.csv'
     
     # Check if template file exists
     if (file.exists(file.path('.', template_file))) {
@@ -101,8 +104,7 @@ process GENERATE_REPORTS {
     library(tidyverse)
     library(quarto)
     
-    template_file <- 'working_patient_report_template.qmd'
-    sample_pgs_mapping_file <- 'sample_pgs_mapping.csv'
+
 
     # Load the data to get patient IDs - handle gzipped files directly
     scores <- read_tsv(gzfile(list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]))
