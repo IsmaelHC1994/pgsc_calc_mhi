@@ -77,8 +77,8 @@ process GENERATE_REPORTS {
     # Expose sample PGS mapping file to R
     export SAMPLE_PGS_MAPPING='${sample_pgs_mapping != 'NO_FILE' ? 'sample_pgs_mapping.csv' : ''}'
 
-    # Run R script directly
-    Rscript --vanilla -e "
+    # Create R script file to avoid escaping issues
+    cat > generate_reports.R << EOF
     library(tidyverse)
     library(quarto)
     
@@ -290,8 +290,10 @@ process GENERATE_REPORTS {
         print('Subset reports generation completed')
       }
     }
-    "
-    """
+    EOF
+
+    # Run the R script
+    Rscript generate_reports.R
 }
 
 process ORGANIZE_REPORTS {
