@@ -68,12 +68,33 @@ process GENERATE_REPORTS {
     
     # Copy FontAwesome from container to working directory
     cp /usr/share/fonts/fontawesome-webfont.ttf fontawesome-webfont.ttf 2>/dev/null || echo 'FontAwesome not found in container, using fallback'
+
+    # Check if fontawesome file exists
+    if (file.exists(file.path('.', 'fontawesome-webfont.ttf'))) {
+      print(paste('FontAwesome file exists:', file.path('.', 'fontawesome-webfont.ttf')))
+    } else {
+      print(paste('FontAwesome file does not exist:', file.path('.', 'fontawesome-webfont.ttf')))
+    }
     
     # Copy the provided template to work directory with a new name
     cp ${report_template} working_patient_report_template.qmd
     
+    # Check if template file exists
+    if (file.exists(file.path('.', template_file))) {
+      print(paste('Template file exists:', file.path('.', template_file)))
+    } else {
+      print(paste('Template file does not exist:', file.path('.', template_file)))
+    }
+
     # Expose sample PGS mapping file to R
     export SAMPLE_PGS_MAPPING='${sample_pgs_mapping != 'NO_FILE' ? 'sample_pgs_mapping.csv' : ''}'
+
+    # check if sample PGS mapping file exists
+    if (file.exists(file.path('.', sample_pgs_mapping_file))) {
+      print(paste('Sample PGS mapping file exists:', file.path('.', sample_pgs_mapping_file)))
+    } else {
+      print(paste('Sample PGS mapping file does not exist:', file.path('.', sample_pgs_mapping_file)))
+    }
 
     # Run R script directly
     Rscript --vanilla -e "
@@ -81,7 +102,8 @@ process GENERATE_REPORTS {
     library(quarto)
     
     template_file <- 'working_patient_report_template.qmd'
-    
+    sample_pgs_mapping_file <- 'sample_pgs_mapping.csv'
+
     # Load the data to get patient IDs - handle gzipped files directly
     scores <- read_tsv(gzfile(list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]))
     popsim <- read_tsv(gzfile(list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]))
@@ -115,28 +137,14 @@ process GENERATE_REPORTS {
     
     # Save all data to file
     writeLines(text_data\\\$Summary, output_file)
-    message(paste('Patient summaries saved to:', normalizePath(output_file)))
-    
-    # Check if template file exists
-    if (file.exists(file.path('.', template_file))) {
-      print(paste('Template file exists:', file.path('.', template_file)))
-    } else {
-      print(paste('Template file does not exist:', file.path('.', template_file)))
-    }
-
-    # Check if fontawesome file exists
-    if (file.exists(file.path('.', 'fontawesome-webfont.ttf'))) {
-      print(paste('FontAwesome file exists:', file.path('.', 'fontawesome-webfont.ttf')))
-    } else {
-      print(paste('FontAwesome file does not exist:', file.path('.', 'fontawesome-webfont.ttf')))
-    }
+    print(paste('Patient summaries saved to:', normalizePath(output_file)))
     
     # Render report for each patient
     for (pid in all_patient_ids) {
-      message(sprintf('Generating reports for patient %s...', pid))
+      print(sprintf('Generating reports for patient %s...', pid))
       
       # Generate HTML report with embedded resources
-      message('  Generating HTML report...')
+      print('  Generating HTML report...')
       quarto_render(
         input = file.path('.', template_file),
         output_format = 'html',
@@ -146,10 +154,10 @@ process GENERATE_REPORTS {
     }
 
     # Optional: subset report generation using CSV mapping
-    sample_pgs_mapping_file <- Sys.getenv('SAMPLE_PGS_MAPPING')
+    sample_pgs_mapping_file <- 'sample_pgs_mapping.csv'
     
     if (nzchar(sample_pgs_mapping_file) && file.exists(sample_pgs_mapping_file)) {
-      message('Generating subset reports using CSV mapping: ', sample_pgs_mapping_file)
+      print('Generating subset reports using CSV mapping: ', sample_pgs_mapping_file)
       
       pgs_path <- list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]
       pop_path <- list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]
@@ -164,13 +172,13 @@ process GENERATE_REPORTS {
           TRUE ~ PGS
         ))
       
-    # Load CSV mapping: sample_id,pgs_id1,pgs_id2,...
-    # Skip header row if present (check if first value looks like 'sample_id')
-    mapping_df <- read_csv(sample_pgs_mapping_file, col_names = FALSE, show_col_types = FALSE)
-    if (nrow(mapping_df) > 0 && tolower(as.character(mapping_df[1, 1])) %in% c('sample_id', 'sample', 'sampleid')) {
-      mapping_df <- mapping_df[-1, ]
-      message('Header row detected and skipped')
-    }
+      # Load CSV mapping: sample_id,pgs_id1,pgs_id2,...
+      # Skip header row if present (check if first value looks like 'sample_id')
+      mapping_df <- read_csv(sample_pgs_mapping_file, col_names = FALSE, show_col_types = FALSE)
+      if (nrow(mapping_df) > 0 && tolower(as.character(mapping_df[1, 1])) %in% c('sample_id', 'sample', 'sampleid')) {
+        mapping_df <- mapping_df[-1, ]
+        print('Header row detected and skipped')
+      }
       
       # Create subset directory
       dir.create('subset', showWarnings = FALSE)
@@ -195,7 +203,7 @@ process GENERATE_REPORTS {
           next
         }
         
-        message('Processing subset for sample ', sample_prefix, ' with PGS IDs: ', paste(pgs_ids_for_sample, collapse = ', '))
+        print('Processing subset for sample ', sample_prefix, ' with PGS IDs: ', paste(pgs_ids_for_sample, collapse = ', '))
         
         # Filter scores for this sample and requested PGS IDs
         scores_sub <- scores_all_with_base %>%
@@ -257,7 +265,7 @@ process GENERATE_REPORTS {
       if (length(ids) > 0) {
         owd <- getwd(); setwd('subset'); on.exit(setwd(owd), add = TRUE)
         for (pid in ids) {
-          message(sprintf('Generating subset report for patient %s...', pid))
+          print(sprintf('Generating subset report for patient %s...', pid))
           quarto::quarto_render('working_patient_report_template.qmd', 
                                 output_file = paste0('patient_', pid, '_subset_report.html'), 
                                 execute_params = list(patient_id = pid))
@@ -276,7 +284,7 @@ process GENERATE_REPORTS {
         
         # Write combined summaries
         writeLines(unlist(all_subset_summaries), 'subset/patient_summaries.csv')
-        message('Subset reports generation completed')
+        print('Subset reports generation completed')
       }
     }
     "
