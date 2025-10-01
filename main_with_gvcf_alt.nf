@@ -164,8 +164,13 @@ process GENERATE_REPORTS {
           TRUE ~ PGS
         ))
       
-      # Load CSV mapping: sample_id,pgs_id1,pgs_id2,...
-      mapping_df <- read_csv(sample_pgs_mapping_file, col_names = FALSE, show_col_types = FALSE)
+    # Load CSV mapping: sample_id,pgs_id1,pgs_id2,...
+    # Skip header row if present (check if first value looks like 'sample_id')
+    mapping_df <- read_csv(sample_pgs_mapping_file, col_names = FALSE, show_col_types = FALSE)
+    if (nrow(mapping_df) > 0 && tolower(as.character(mapping_df[1, 1])) %in% c('sample_id', 'sample', 'sampleid')) {
+      mapping_df <- mapping_df[-1, ]
+      message('Header row detected and skipped')
+    }
       
       # Create subset directory
       dir.create('subset', showWarnings = FALSE)
@@ -207,10 +212,16 @@ process GENERATE_REPORTS {
         # Add to collection
         all_subset_scores[[i]] <- scores_sub
         
-        # Generate subset report for this sample
+      # Generate subset report for this sample
+      # Note: scores_sub already has MostSimilarPop if it was joined earlier, otherwise join from pop_all
+      if (!'MostSimilarPop' %in% colnames(scores_sub)) {
         scores_popsim_sub <- scores_sub %>%
           dplyr::left_join(pop_all %>% dplyr::select(IID, MostSimilarPop), by = 'IID') %>%
           dplyr::mutate(simple_id = stringr::str_extract(IID, '[^_]+\\\$'))
+      } else {
+        scores_popsim_sub <- scores_sub %>%
+          dplyr::mutate(simple_id = stringr::str_extract(IID, '[^_]+\\\$'))
+      }
         
         run_patient_data_sub <- scores_popsim_sub %>%
           dplyr::filter(sampleset != 'reference') %>%
