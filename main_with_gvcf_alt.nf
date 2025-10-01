@@ -68,44 +68,40 @@ process GENERATE_REPORTS {
     
     # Copy FontAwesome from container to working directory
     cp /usr/share/fonts/fontawesome-webfont.ttf fontawesome-webfont.ttf 2>/dev/null || echo 'FontAwesome not found in container, using fallback'
-
-    # Check if fontawesome file exists
-    if (file.exists(file.path('.', 'fontawesome-webfont.ttf'))) {
-      print(paste('FontAwesome file exists:', file.path('.', 'fontawesome-webfont.ttf')))
-    } else {
-      print(paste('FontAwesome file does not exist:', file.path('.', 'fontawesome-webfont.ttf')))
-    }
     
     # Copy the provided template to work directory with a new name
     cp ${report_template} working_patient_report_template.qmd
 
-    template_file <- 'working_patient_report_template.qmd'
-    sample_pgs_mapping_file <- 'sample_pgs_mapping.csv'
-    
-    # Check if template file exists
-    if (file.exists(file.path('.', template_file))) {
-      print(paste('Template file exists:', file.path('.', template_file)))
-    } else {
-      print(paste('Template file does not exist:', file.path('.', template_file)))
-    }
-
     # Expose sample PGS mapping file to R
     export SAMPLE_PGS_MAPPING='${sample_pgs_mapping != 'NO_FILE' ? 'sample_pgs_mapping.csv' : ''}'
-
-    # check if sample PGS mapping file exists
-    if (file.exists(file.path('.', sample_pgs_mapping_file))) {
-      print(paste('Sample PGS mapping file exists:', file.path('.', sample_pgs_mapping_file)))
-    } else {
-      print(paste('Sample PGS mapping file does not exist:', file.path('.', sample_pgs_mapping_file)))
-    }
 
     # Run R script directly
     Rscript --vanilla -e "
     library(tidyverse)
     library(quarto)
     
-
-
+    template_file <- 'working_patient_report_template.qmd'
+    sample_pgs_mapping_file <- Sys.getenv('SAMPLE_PGS_MAPPING')
+    
+    # Check if files exist
+    if (file.exists(file.path('.', 'fontawesome-webfont.ttf'))) {
+      print(paste('FontAwesome file exists:', file.path('.', 'fontawesome-webfont.ttf')))
+    } else {
+      print(paste('FontAwesome file does not exist:', file.path('.', 'fontawesome-webfont.ttf')))
+    }
+    
+    if (file.exists(file.path('.', template_file))) {
+      print(paste('Template file exists:', file.path('.', template_file)))
+    } else {
+      print(paste('Template file does not exist:', file.path('.', template_file)))
+    }
+    
+    if (nzchar(sample_pgs_mapping_file) && file.exists(file.path('.', sample_pgs_mapping_file))) {
+      print(paste('Sample PGS mapping file exists:', file.path('.', sample_pgs_mapping_file)))
+    } else {
+      print(paste('Sample PGS mapping file does not exist:', file.path('.', sample_pgs_mapping_file)))
+    }
+    
     # Load the data to get patient IDs - handle gzipped files directly
     scores <- read_tsv(gzfile(list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]))
     popsim <- read_tsv(gzfile(list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]))
@@ -156,7 +152,7 @@ process GENERATE_REPORTS {
     }
 
     # Optional: subset report generation using CSV mapping
-    sample_pgs_mapping_file <- 'sample_pgs_mapping.csv'
+    sample_pgs_mapping_file <- Sys.getenv('SAMPLE_PGS_MAPPING')
     
     if (nzchar(sample_pgs_mapping_file) && file.exists(sample_pgs_mapping_file)) {
       print('Generating subset reports using CSV mapping: ', sample_pgs_mapping_file)
