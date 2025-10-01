@@ -48,7 +48,8 @@ process GENERATE_REPORTS {
     publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
     
     input:
-    path(result_files)
+    path(pgs_file)
+    path(pop_file)
     path(report_template)
     path(sample_pgs_mapping), stageAs: 'sample_pgs_mapping.csv'
     
@@ -56,6 +57,7 @@ process GENERATE_REPORTS {
     path "patient*.html"
     path "patient_summaries.csv"
     path "subset/patient*subset_report.html", optional: true
+    path "subset/subset_summaries.csv", optional: true
     path "subset/pgs_subset.csv", optional: true
     
     script:
@@ -103,8 +105,8 @@ process GENERATE_REPORTS {
     }
     
     # Load the data to get patient IDs - handle gzipped files directly
-    scores <- read_tsv(gzfile(list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]))
-    popsim <- read_tsv(gzfile(list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]))
+    scores <- read_tsv(gzfile('${pgs_file}'))
+    popsim <- read_tsv(gzfile('${pop_file}'))
     
     # Create run_patient_data
     scores_popsim <- scores %>%
@@ -123,18 +125,12 @@ process GENERATE_REPORTS {
     
     # Save all patient summaries to file
     output_file <- file.path('.', 'patient_summaries.csv')
-    text_data <- run_patient_data %>%
-      mutate(
-        Summary = sprintf(
-          'Patient: %s, Score: %s, Overall Percentile: %.1f%%',
-          IID,
-          Z_MostSimilarPop,
-          Overall_Percentile
-        )
-      )
+    summary_data <- run_patient_data %>%
+      select(IID, PGS, Z_MostSimilarPop, Overall_Percentile) %>%
+      distinct()
     
-    # Save all data to file
-    writeLines(text_data\\\$Summary, output_file)
+    # Save as CSV
+    write_csv(summary_data, output_file)
     print(paste('Patient summaries saved to:', normalizePath(output_file)))
     
     # Render report for each patient
@@ -157,8 +153,8 @@ process GENERATE_REPORTS {
     if (nzchar(sample_pgs_mapping_file) && file.exists(sample_pgs_mapping_file)) {
       print('Generating subset reports using CSV mapping: ', sample_pgs_mapping_file)
       
-      pgs_path <- list.files(pattern = 'pgs.txt.gz', full.names = TRUE)[1]
-      pop_path <- list.files(pattern = 'popsimilarity.txt.gz', full.names = TRUE)[1]
+      pgs_path <- '${pgs_file}'
+      pop_path <- '${pop_file}'
       scores_all <- read_tsv(gzfile(pgs_path))
       pop_all <- read_tsv(gzfile(pop_path))
       
@@ -178,8 +174,9 @@ process GENERATE_REPORTS {
         print('Header row detected and skipped')
       }
       
-      # Create subset directory
+      # Create subset directory structure
       dir.create('subset', showWarnings = FALSE)
+      dir.create('subset/subset_reports', showWarnings = FALSE)
       
       # Copy FontAwesome font and template to subset folder once
       if (file.exists('fontawesome-webfont.ttf')) {
@@ -261,10 +258,10 @@ process GENERATE_REPORTS {
         unique()
       
       if (length(ids) > 0) {
-        owd <- getwd(); setwd('subset'); on.exit(setwd(owd), add = TRUE)
+        owd <- getwd(); setwd('subset/subset_reports'); on.exit(setwd(owd), add = TRUE)
         for (pid in ids) {
           print(sprintf('Generating subset report for patient %s...', pid))
-          quarto::quarto_render('working_patient_report_template.qmd', 
+          quarto::quarto_render('../working_patient_report_template.qmd', 
                                 output_file = paste0('patient_', pid, '_subset_report.html'), 
                                 execute_params = list(patient_id = pid))
         }
@@ -282,10 +279,67 @@ process GENERATE_REPORTS {
         
         # Write combined summaries
         writeLines(unlist(all_subset_summaries), 'subset/patient_summaries.csv')
+        
+        # Create subset summary table
+        subset_summary_data <- dplyr::bind_rows(all_subset_scores) %>%
+          dplyr::filter(sampleset != 'reference') %>%
+          dplyr::select(IID, PGS, Z_MostSimilarPop) %>%
+          dplyr::distinct()
+        
+        readr::write_csv(subset_summary_data, 'subset/subset_summaries.csv')
         print('Subset reports generation completed')
       }
     }
     "
+    """
+}
+
+process ORGANIZE_REPORTS {
+    label 'process_low'
+    publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
+    
+    input:
+    path(patient_reports)
+    path(patient_summaries)
+    path(subset_reports)
+    path(subset_summaries)
+    path(subset_pgs)
+    
+    output:
+    path "overall_reports/patient*.html"
+    path "patient_summaries.csv"
+    path "subset/subset_reports/patient*subset_report.html", optional: true
+    path "subset/subset_summaries.csv", optional: true
+    path "subset/pgs_subset.csv", optional: true
+    
+    script:
+    """
+    # Create directory structure
+    mkdir -p overall_reports
+    mkdir -p subset/subset_reports
+    
+    # Move main reports to overall_reports
+    for report in ${patient_reports}; do
+        cp "\$report" overall_reports/
+    done
+    
+    # Copy patient summaries (already in correct location)
+    # cp ${patient_summaries} patient_summaries.csv
+    
+    # Move subset files if they exist
+    if [ -n "${subset_reports}" ]; then
+        for report in ${subset_reports}; do
+            cp "\$report" subset/subset_reports/
+        done
+    fi
+    
+    if [ -n "${subset_summaries}" ]; then
+        cp ${subset_summaries} subset/subset_summaries.csv
+    fi
+    
+    if [ -n "${subset_pgs}" ]; then
+        cp ${subset_pgs} subset/pgs_subset.csv
+    fi
     """
 }
 
@@ -338,14 +392,24 @@ workflow {
     score_files_channel = PGSCCALC.out.score_files.map { meta, file -> file }
     ancestry_results_channel = PGSCCALC.out.ancestry_results.map { meta, file -> file }
     
-    // Combine all files into a single channel
-    all_result_files = score_files_channel.mix(ancestry_results_channel).collect()
+    // Create separate channels for PGS and population files
+    ch_pgs_file = score_files_channel.filter { it.toString().contains('pgs.txt.gz') }.first()
+    ch_pop_file = ancestry_results_channel.filter { it.toString().contains('popsimilarity.txt.gz') }.first()
     
     // Prepare sample PGS mapping file (if provided)
     ch_sample_pgs_mapping = params.sample_pgs_mapping ? 
         Channel.fromPath(params.sample_pgs_mapping) : 
         Channel.value(file('NO_FILE'))
     
-    // Generate reports using all results and the provided template
-    GENERATE_REPORTS(all_result_files, file(params.report_template), ch_sample_pgs_mapping)
+    // Generate reports using separate PGS and population files
+    GENERATE_REPORTS(ch_pgs_file, ch_pop_file, file(params.report_template), ch_sample_pgs_mapping)
+    
+    // Organize the output files into proper directory structure
+    ORGANIZE_REPORTS(
+        GENERATE_REPORTS.out[0],  // patient*.html
+        GENERATE_REPORTS.out[1],  // patient_summaries.csv
+        GENERATE_REPORTS.out[2],  // subset/patient*subset_report.html
+        GENERATE_REPORTS.out[3],  // subset/subset_summaries.csv
+        GENERATE_REPORTS.out[4]   // subset/pgs_subset.csv
+    )
 }
