@@ -151,7 +151,7 @@ process GENERATE_REPORTS {
     sample_pgs_mapping_file <- Sys.getenv('SAMPLE_PGS_MAPPING')
     
     if (nzchar(sample_pgs_mapping_file) && file.exists(sample_pgs_mapping_file)) {
-      print('Generating subset reports using CSV mapping: ', sample_pgs_mapping_file)
+      message('Generating subset reports using CSV mapping: ', sample_pgs_mapping_file)
       
       pgs_path <- '${pgs_file}'
       pop_path <- '${pop_file}'
@@ -198,7 +198,7 @@ process GENERATE_REPORTS {
           next
         }
         
-        print('Processing subset for sample ', sample_prefix, ' with PGS IDs: ', paste(pgs_ids_for_sample, collapse = ', '))
+        message('Processing subset for sample ', sample_prefix, ' with PGS IDs: ', paste(pgs_ids_for_sample, collapse = ', '))
         
         # Filter scores for this sample and requested PGS IDs
         scores_sub <- scores_all_with_base %>%
