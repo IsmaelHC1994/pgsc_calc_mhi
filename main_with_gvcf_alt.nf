@@ -388,12 +388,12 @@ workflow {
     
     // Step 3: Generate reports using both score files and ancestry results from PGSC_CALC
     // Extract just the file paths from the metadata tuples
-    score_files_channel = PGSCCALC.out.score_files.map { meta, file -> file }
-    ancestry_results_channel = PGSCCALC.out.ancestry_results.map { meta, file -> file }
+    score_files_channel = PGSCCALC.out.score_files.map { meta, file -> file }.flatten()
+    ancestry_results_channel = PGSCCALC.out.ancestry_results.map { meta, file -> file }.flatten()
     
     // Create separate channels for PGS and population files
-    ch_pgs_file = score_files_channel.filter { it.toString().contains('pgs.txt.gz') }.first()
-    ch_pop_file = ancestry_results_channel.filter { it.toString().contains('popsimilarity.txt.gz') }.first()
+    ch_pgs_file = score_files_channel.filter { it.toString().endsWith('pgs.txt.gz') }.first()
+    ch_pop_file = ancestry_results_channel.filter { it.toString().endsWith('popsimilarity.txt.gz') }.first()
     
     // Prepare sample PGS mapping file (if provided)
     ch_sample_pgs_mapping = params.sample_pgs_mapping ? 
