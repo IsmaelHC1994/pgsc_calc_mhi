@@ -290,7 +290,6 @@ process GENERATE_REPORTS {
         print('Subset reports generation completed')
       }
     }
-  }
   EOF
 
     # Run the R script
