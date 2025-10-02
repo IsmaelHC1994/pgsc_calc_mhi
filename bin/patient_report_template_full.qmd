@@ -293,6 +293,253 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
 
   return(p)
 }
+
+# Function to create patient risk visualization with human icons - only show overall percentile
+create_patient_risk_viz <- function(patient_id, pgs_id = NULL) {
+  # Get patient data, filtered by PRS if provided
+  filtered_data <- if (!is.null(pgs_id)) {
+    scores_popsim %>% filter(PGS == pgs_id)
+  } else {
+    scores_popsim
+  }
+  
+  if(nrow(filtered_data %>% filter(IID == full_patient_id)) == 0) {
+    return(ggplot() + annotate("text", x = 0, y = 0, label = "Patient not found") + 
+           theme_void())
+  }
+
+  # Get overall percentile only
+  patient_percentile <- filtered_data %>%
+    filter(IID == full_patient_id) %>%
+    pull(Overall_Percentile)
+  
+  # Create grid positions (10 rows x 10 columns)
+  n_rows <- 10
+  n_cols <- 10
+  grid_positions <- expand.grid(
+    row = 1:n_rows,
+    col = 1:n_cols
+  ) %>%
+    mutate(
+      percentile_range = case_when(
+        row == 1 ~ "0-10",
+        row == 10 ~ "91-100",
+        TRUE ~ paste0(((row - 1) * 10 + 1), "-", (row * 10))
+      ),
+      row_start = (row - 1) * 10,
+      row_end = row * 10,
+      is_patient_row = patient_percentile > row_start & patient_percentile <= row_end
+    )
+  
+  # Create the plot with publication-ready theme
+  ggplot(grid_positions, aes(x = col, y = row, color = is_patient_row)) +
+    annotate(
+      "segment",
+      x = n_cols + 1.2,
+      xend = n_cols + 1.2,
+      y = 1,
+      yend = n_rows,
+      arrow = arrow(length = unit(0.3, "cm"), ends = "last"),
+      color = "black"
+    ) +
+    geom_text(
+      label = if(use_fontawesome) "\uf007" else "●",     # FontAwesome person icon or circle fallback
+      family = if(use_fontawesome) "FontAwesome" else "sans",
+      size = 16,
+      vjust = 0.5,
+      hjust = 0.5,
+      show.legend = FALSE
+    ) +
+    scale_color_manual(values = c("FALSE" = "gray80", "TRUE" = "#3366CC")) +
+    scale_y_continuous(
+      breaks = 1:n_rows,
+      labels = c("0-10", "11-20", "21-30", "31-40", "41-50", 
+                "51-60", "61-70", "71-80", "81-90", "91-100"),
+      expand = expansion(mult = c(0.05, 0.05))
+    ) +
+    scale_x_continuous(
+      expand = expansion(mult = c(0.02, 0.15)),
+      limits = c(0.5, n_cols + 1.5)
+    ) +
+    labs(
+      title = "Overall Risk Percentile",
+      subtitle = paste0(round(patient_percentile, 1), "th percentile"),
+      y = "Percentile Range",
+      x = NULL
+    ) +
+    theme_pubr(base_size = 32) +  # Using theme_pubr directly with large base size
+    theme(
+      plot.title = element_text(size = 42, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 36, hjust = 0.5),
+      axis.title = element_text(size = 36, face = "bold"),
+      axis.text = element_text(size = 30),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.margin = margin(t = 20, r = 20, b = 20, l = 20),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank()
+    ) +
+    annotate(
+      "text",
+      x = n_cols + 1.5,
+      y = n_rows,
+      label = "risque plus élevé",
+      hjust = 0,
+      vjust = 0.5,
+      size = 12
+    ) +
+    annotate(
+      "text",
+      x = n_cols + 1.5,
+      y = 1,
+      label = "risque plus faible",
+      hjust = 0,
+      vjust = -0.5,
+      size = 12
+    ) 
+}
+
+# Function to create density plot for a patient - SIMPLIFIED to only show overall density
+create_density_plot <- function(patient_id, pgs_id = NULL) {
+  # Filter data by PRS if provided
+  filtered_data <- if (!is.null(pgs_id)) {
+    scores_popsim %>% filter(PGS == pgs_id)
+  } else {
+    scores_popsim
+  }
+  
+  # Get the x-axis limits for arrow placement
+  max_density <- max(density(filtered_data$Z_MostSimilarPop)$y)
+  
+  ggplot() +
+    geom_density(
+      data = filtered_data,
+      aes(x = Z_MostSimilarPop),
+      fill = "steelblue",
+      alpha = 0.5,
+      color = "black",
+      linewidth = 1.5
+    ) +
+    geom_vline(
+      data = filtered_data %>% filter(IID == full_patient_id),
+      aes(xintercept = Z_MostSimilarPop),
+      color = "red",
+      linetype = "dashed",
+      linewidth = 1.5
+    ) +
+    geom_text(
+      data = filtered_data %>% filter(IID == full_patient_id),
+      aes(x = Z_MostSimilarPop, y = max_density * 0.9, 
+          label = paste("Patient", params$patient_id)),
+      color = "red",
+      hjust = -0.1,
+      vjust = 0,
+      size = 12
+    ) +
+    labs(
+      title = "Overall Distribution of PRS Scores",
+      x = "Z-Score (Most Similar Population)",
+      y = "Density"
+    ) +
+    theme_pubr(base_size = 28) +  # Consistent use of theme_pubr
+    theme(
+      plot.title = element_text(size = 36, face = "bold", hjust = 0.5),
+      axis.title = element_text(size = 32, face = "bold"),
+      axis.text = element_text(size = 28),
+      plot.margin = margin(t = 20, r = 20, b = 20, l = 20)
+    )
+}
+
+# function to create a histogram of the PRS score
+create_histogram_density_plot <- function(patient_id, pgs_id = NULL) {
+  # Filter data by PRS if provided
+  filtered_data <- if (!is.null(pgs_id)) {
+    scores_popsim %>% filter(PGS == pgs_id)
+  } else {
+    scores_popsim
+  }
+  
+  # Get the x-axis limits for arrow placement
+  max_density <- max(density(filtered_data$Z_MostSimilarPop)$y)
+  
+  ggplot(filtered_data, aes(x = Z_MostSimilarPop)) +
+    geom_histogram(binwidth = 0.5, fill = "steelblue", alpha = 0.7, color = "black", linewidth = 0.8) +
+    # Add vertical line for patient
+    geom_vline(
+      data = filtered_data %>% filter(IID == full_patient_id),
+      aes(xintercept = Z_MostSimilarPop),
+      color = "red",
+      linetype = "dashed",
+      linewidth = 1.5
+    ) +
+    # Add text annotation for patient
+    geom_text(
+      data = filtered_data %>% filter(IID == full_patient_id),
+      aes(x = Z_MostSimilarPop, y = max_density * 0.8, 
+          label = paste("Patient", patient_id)),
+      color = "red",
+      hjust = -0.1,
+      vjust = -10,
+      size = 12
+    ) +
+    labs(
+      title = "Distribution of PRS Scores",
+      subtitle = "Patient highlighted in red",
+      x = "Z-Score (Most Similar Population)",
+      y = "Frequency"
+    ) +
+    theme_pubr(base_size = 28) +  # Using theme_pubr consistently
+    theme(
+      plot.title = element_text(size = 36, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 32, hjust = 0.5),
+      axis.title = element_text(size = 32, face = "bold"),
+      axis.text = element_text(size = 28),
+      plot.margin = margin(t = 20, r = 20, b = 20, l = 20)
+    )
+}
+
+# boxplot of the PRS score with patient placement
+create_boxplot <- function(patient_id, pgs_id = NULL) {
+  # Filter data by PRS if provided
+  filtered_data <- if (!is.null(pgs_id)) {
+    scores_popsim %>% filter(PGS == pgs_id)
+  } else {
+    scores_popsim
+  }
+  
+  ggplot(filtered_data, aes(x = PGS, y = Z_MostSimilarPop)) +
+    # Add boxplot
+    geom_boxplot(alpha = 0.7, width = 0.5, size = 1.5, outlier.size = 3) +
+    # Highlight patient point
+    geom_point(
+      data = filtered_data %>% filter(IID == full_patient_id),
+      size = 10,
+      shape = 17,
+      color = "red"
+    ) +
+    # Add mean line
+    stat_summary(
+      fun = mean,
+      geom = "crossbar",
+      width = 0.5,
+      size = 1.2,
+      color = "darkblue"
+    ) +
+    labs(
+      title = "Distribution des scores PRS",
+      subtitle = paste("Patient", patient_id, "en rouge"),
+      x = NULL,
+      y = "Score PRS (Z_MostSimilarPop)"
+    ) +
+    theme_pubr(base_size = 28) +  # Using theme_pubr consistently
+    theme(
+      plot.title = element_text(size = 36, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 32, hjust = 0.5),
+      axis.title = element_text(size = 32, face = "bold"),
+      axis.text = element_text(size = 28)
+    )
+}
 ```
 
 
@@ -372,10 +619,7 @@ for (pgs_id in patient_pgs_scores) {
   
   # Create and print bell curve visualization
   bell_curve_plot <- create_bell_curve_risk_viz(params$patient_id, pgs_id)
-  print(bell_curve_plot)\
-
-  # Add risk direction text with arrow 
-  cat('<div style="text-align: center; font-size: 24px; margin-top: -20px; margin-bottom: 20px;"><strong>Risque plus faible ←———→ Risque plus élevé</strong></div>\n\n')
+  print(bell_curve_plot)
   
   # Add explanation text
   cat("\n\n")
@@ -389,6 +633,33 @@ for (pgs_id in patient_pgs_scores) {
       100 - round(scores_popsim %>% filter(IID == full_patient_id, PGS == pgs_id) %>% pull(Overall_Percentile)), 
       " personnes.\n\n")
  
+  # Risk visualization section
+  cat("\n\n### Visualisation du risque pour", pgs_id, "\n\n")
+  
+  # Create risk visualization plot only showing overall risk
+  risk_plot <- create_patient_risk_viz(params$patient_id, pgs_id)
+  
+  # Print the risk plot
+  print(risk_plot)
+  
+  # Score distribution section
+  cat("\n\n### Distribution du score pour", pgs_id, "\n\n")
+  
+  # Create and print histogram 
+  cat("\n\n#### Histogramme du score global\n\n")
+  hist_plot <- create_histogram_density_plot(params$patient_id, pgs_id)
+  print(hist_plot)
+  
+  # Add risk direction text with arrow 
+  cat('<div style="text-align: center; font-size: 24px; margin-top: -20px; margin-bottom: 20px;"><strong>Risque plus faible ←———→ Risque plus élevé</strong></div>\n\n')
+  
+  # Create and print density plot
+  cat("\n\n#### Distribution du score global\n\n")
+  density_plot <- create_density_plot(params$patient_id, pgs_id)
+  print(density_plot)
+  
+  # Add risk direction text with arrow b
+  cat('<div style="text-align: center; font-size: 24px; margin-top: -20px; margin-bottom: 20px;"><strong>Risque plus faible ←———→ Risque plus élevé</strong></div>\n\n')
 }
 ``` 
 

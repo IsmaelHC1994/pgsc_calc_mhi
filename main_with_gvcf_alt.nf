@@ -45,7 +45,7 @@ process COLLECT_SCOREFILES {
 process GENERATE_REPORTS {
     label 'process_low'
     container = 'docker.io/ismaelhc94/pgsc-mhi-report:dev'
-    publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
+    // publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
     
     input:
     path(pgs_file)
@@ -246,9 +246,9 @@ process GENERATE_REPORTS {
         all_subset_summaries[[i]] <- subset_text_data\\\$Summary
         
       # Write temporary data files for this sample's subset reports
-      # Note: We write the full scores_all because the template needs all reference samples
-      # to calculate percentiles and create density plots
-      readr::write_tsv(scores_all, gzfile('subset/pgs.txt.gz'))
+      # Note: We write scores_sub (filtered by sample and PGS) for subset-specific reports
+      # This includes all reference samples for the specific PGS IDs, ensuring density plots work
+      readr::write_tsv(scores_sub, gzfile('subset/pgs.txt.gz'))
       readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
       
       # Generate subset reports for this sample's patients
