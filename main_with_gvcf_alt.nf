@@ -290,10 +290,13 @@ process GENERATE_REPORTS {
         print('Subset reports generation completed')
       }
     }
-    EOF
+  }
+  }
+  EOF
 
     # Run the R script
     Rscript generate_reports.R
+    """
 }
 
 process ORGANIZE_REPORTS {
