@@ -291,7 +291,6 @@ process GENERATE_REPORTS {
       }
     }
   }
-  }
   EOF
 
     # Run the R script
