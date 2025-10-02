@@ -246,9 +246,9 @@ process GENERATE_REPORTS {
         all_subset_summaries[[i]] <- subset_text_data\\\$Summary
         
       # Write temporary data files for this sample's subset reports
-      # Note: We write the full pop_all because popsimilarity is independent of PGS scores
-      # and the template needs it for all reference samples to calculate percentiles
-      readr::write_tsv(scores_sub, gzfile('subset/pgs.txt.gz'))
+      # Note: We write the full scores_all because the template needs all reference samples
+      # to calculate percentiles and create density plots
+      readr::write_tsv(scores_all, gzfile('subset/pgs.txt.gz'))
       readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
       
       # Generate subset reports for this sample's patients
