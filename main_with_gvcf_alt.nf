@@ -45,6 +45,7 @@ process COLLECT_SCOREFILES {
 process GENERATE_REPORTS {
     label 'process_low'
     container = 'docker.io/ismaelhc94/pgsc-mhi-report:dev'
+    publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
     
     input:
     path(pgs_file)
@@ -232,6 +233,13 @@ process GENERATE_REPORTS {
           quarto::quarto_render('../working_patient_report_template.qmd', 
                                 output_file = paste0('patient_', pid, '_subset_report.html'), 
                                 execute_params = list(patient_id = pid))
+          
+          # Move the generated report to the sample directory
+          report_file <- paste0('patient_', pid, '_subset_report.html')
+          if (file.exists(report_file)) {
+            file.copy(report_file, file.path('..', '..', sample_dir, report_file), overwrite = TRUE)
+            file.remove(report_file)
+          }
         }
         setwd(owd)
       }
@@ -243,57 +251,6 @@ process GENERATE_REPORTS {
 
     # Run the R script
     Rscript generate_reports.R
-    """
-}
-
-process ORGANIZE_REPORTS {
-    label 'process_low'
-    publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
-    
-    input:
-    path(subset_reports)
-    path(subset_summaries)
-    path(subset_pgs)
-    
-    output:
-    path "results/sample_*/patient*subset_report.html", optional: true
-    path "results/sample_*/subset_summaries.csv", optional: true
-    path "results/sample_*/pgs_subset.csv", optional: true
-    
-    script:
-    """
-    # Create results directory structure
-    mkdir -p results
-    
-    # Process subset reports - organize by sample ID
-    if [ -n "${subset_reports}" ]; then
-        for report in ${subset_reports}; do
-            # Extract sample ID from filename (e.g., patient_24-1979_subset_report.html -> 24-1979)
-            sample_id=\$(basename "\$report" | sed 's/patient_\\([^_]*\\)_subset_report\\.html/\\1/')
-            mkdir -p "results/sample_\${sample_id}"
-            cp "\$report" "results/sample_\${sample_id}/"
-        done
-    fi
-    
-    # Process subset summaries - files are already organized by sample
-    if [ -n "${subset_summaries}" ]; then
-        for csv_file in ${subset_summaries}; do
-            # Extract sample ID from directory name (e.g., sample_24-1979/subset_summaries.csv -> 24-1979)
-            sample_id=\$(dirname "\$csv_file" | sed 's/sample_\\(.*\\)/\\1/')
-            mkdir -p "results/sample_\${sample_id}"
-            cp "\$csv_file" "results/sample_\${sample_id}/"
-        done
-    fi
-    
-    # Process subset PGS data - files are already organized by sample
-    if [ -n "${subset_pgs}" ]; then
-        for csv_file in ${subset_pgs}; do
-            # Extract sample ID from directory name (e.g., sample_24-1979/pgs_subset.csv -> 24-1979)
-            sample_id=\$(dirname "\$csv_file" | sed 's/sample_\\(.*\\)/\\1/')
-            mkdir -p "results/sample_\${sample_id}"
-            cp "\$csv_file" "results/sample_\${sample_id}/"
-        done
-    fi
     """
 }
 
@@ -358,11 +315,4 @@ workflow {
     
     // Generate reports using separate PGS and population files
     GENERATE_REPORTS(ch_pgs_file, ch_pop_file, file(params.report_template), ch_sample_pgs_mapping)
-    
-    // Organize the output files into proper directory structure by sample ID
-    ORGANIZE_REPORTS(
-        GENERATE_REPORTS.out[0],  // subset/patient*subset_report.html
-        GENERATE_REPORTS.out[1],   // subset/subset_summaries.csv
-        GENERATE_REPORTS.out[2]    // subset/pgs_subset.csv
-    )
 }
