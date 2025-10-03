@@ -130,9 +130,12 @@ process GENERATE_REPORTS {
         print('Header row detected and skipped')
       }
       
-      # Create subset directory structure
-      dir.create('subset', showWarnings = FALSE)
-      dir.create('subset/subset_reports', showWarnings = FALSE)
+        # Create subset directory structure (clean up any existing one first)
+        if (dir.exists('subset')) {
+          unlink('subset', recursive = TRUE)
+        }
+        dir.create('subset', showWarnings = FALSE)
+        dir.create('subset/subset_reports', showWarnings = FALSE)
       
       # Copy FontAwesome font and template to subset folder once
       if (file.exists('fontawesome-webfont.ttf')) {
@@ -234,18 +237,30 @@ process GENERATE_REPORTS {
                                 output_file = paste0('patient_', pid, '_subset_report.html'), 
                                 execute_params = list(patient_id = pid))
           
-          # Move the generated report to the sample directory
+          # The file might be in subset/ instead of subset/subset_reports/
           report_file <- paste0('patient_', pid, '_subset_report.html')
+          subset_report_path <- file.path('..', report_file)
+          
+          # Check if file exists in current directory or parent subset directory
           if (file.exists(report_file)) {
+            # File is in subset/subset_reports/
             file.copy(report_file, file.path('..', '..', sample_dir, report_file), overwrite = TRUE)
             file.remove(report_file)
+          } else if (file.exists(subset_report_path)) {
+            # File is in subset/
+            file.copy(subset_report_path, file.path('..', '..', sample_dir, report_file), overwrite = TRUE)
+            file.remove(subset_report_path)
           }
         }
         setwd(owd)
       }
-      }
       
       print('Subset reports generation completed')
+      
+      # Clean up: remove the subset directory since we've moved everything to sample_* directories
+      if (dir.exists('subset')) {
+        unlink('subset', recursive = TRUE)
+      }
     }
   EOF
 
