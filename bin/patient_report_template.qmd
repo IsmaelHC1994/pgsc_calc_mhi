@@ -374,6 +374,9 @@ for (pgs_id in patient_pgs_scores) {
   bell_curve_plot <- create_bell_curve_risk_viz(params$patient_id, pgs_id)
   print(bell_curve_plot)
 
+  # add spacing
+  cat("\n\n")
+
   # Add risk direction text with arrow 
   cat('<div style="text-align: center; font-size: 24px; margin-top: -20px; margin-bottom: 20px;"><strong>Risque plus faible ←———→ Risque plus élevé</strong></div>\n\n')
   

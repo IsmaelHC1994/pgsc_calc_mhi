@@ -45,7 +45,6 @@ process COLLECT_SCOREFILES {
 process GENERATE_REPORTS {
     label 'process_low'
     container = 'docker.io/ismaelhc94/pgsc-mhi-report:dev'
-    // publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
     
     input:
     path(pgs_file)
@@ -54,11 +53,9 @@ process GENERATE_REPORTS {
     path(sample_pgs_mapping), stageAs: 'sample_pgs_mapping.csv'
     
     output:
-    path "patient*.html"
-    path "patient_summaries.csv"
     path "subset/patient*subset_report.html", optional: true
-    path "subset/subset_summaries.csv", optional: true
-    path "subset/pgs_subset.csv", optional: true
+    path "sample_*/subset_summaries.csv", optional: true
+    path "sample_*/pgs_subset.csv", optional: true
     
     script:
     """
@@ -104,48 +101,6 @@ process GENERATE_REPORTS {
       print(paste('Sample PGS mapping file does not exist:', file.path('.', sample_pgs_mapping_file)))
     }
     
-    # Load the data to get patient IDs - handle gzipped files directly
-    scores <- read_tsv(gzfile('${pgs_file}'))
-    popsim <- read_tsv(gzfile('${pop_file}'))
-    
-    # Create run_patient_data
-    scores_popsim <- scores %>%
-      left_join(popsim %>% select(IID, MostSimilarPop), by = 'IID') %>%
-      mutate(simple_id = str_extract(IID, '[^_]+\\\$'))
-    
-    run_patient_data <- scores_popsim %>%
-      filter(sampleset != 'reference') %>%
-      mutate(Overall_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
-      group_by(MostSimilarPop) %>%
-      mutate(Population_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
-      ungroup()
-    
-    # Get list of all patient IDs
-    all_patient_ids <- unique(run_patient_data\\\$simple_id)
-    
-    # Save all patient summaries to file
-    output_file <- file.path('.', 'patient_summaries.csv')
-    summary_data <- run_patient_data %>%
-      select(IID, PGS, Z_MostSimilarPop, Overall_Percentile) %>%
-      distinct()
-    
-    # Save as CSV
-    write_csv(summary_data, output_file)
-    print(paste('Patient summaries saved to:', normalizePath(output_file)))
-    
-    # Render report for each patient
-    for (pid in all_patient_ids) {
-      print(sprintf('Generating reports for patient %s...', pid))
-      
-      # Generate HTML report with embedded resources
-      print('  Generating HTML report...')
-      quarto_render(
-        input = file.path('.', template_file),
-        output_format = 'html',
-        output_file = paste0('patient_', pid, '_report.html'),
-        execute_params = list(patient_id = pid)
-      )
-    }
 
     # Optional: subset report generation using CSV mapping
     sample_pgs_mapping_file <- Sys.getenv('SAMPLE_PGS_MAPPING')
@@ -200,12 +155,22 @@ process GENERATE_REPORTS {
         
         message('Processing subset for sample ', sample_prefix, ' with PGS IDs: ', paste(pgs_ids_for_sample, collapse = ', '))
         
-        # Filter scores for this sample and requested PGS IDs
-        scores_sub <- scores_all_with_base %>%
+        # Get all reference samples for the specific PGS IDs
+        reference_subset <- scores_all_with_base %>%
+          dplyr::filter(
+            sampleset == 'reference',
+            PGS_base %in% pgs_ids_for_sample
+          )
+        
+        # Get patient samples for this specific sample
+        patient_subset <- scores_all_with_base %>%
           dplyr::filter(
             stringr::str_starts(IID, sample_prefix),
             PGS_base %in% pgs_ids_for_sample
           )
+        
+        # Combine reference + patient data for correct percentile calculation
+        scores_sub <- dplyr::bind_rows(reference_subset, patient_subset)
         
         if (nrow(scores_sub) == 0) {
           warning('No rows found for sample ', sample_prefix, '; skipping')
@@ -233,21 +198,24 @@ process GENERATE_REPORTS {
           dplyr::mutate(Population_Percentile = round(dplyr::percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
           dplyr::ungroup()
         
-        # Collect summaries
-        subset_text_data <- run_patient_data_sub %>%
-          dplyr::mutate(
-            Summary = sprintf(
-              'Patient: %s, Score: %s, Overall Percentile: %.1f%%',
-              IID,
-              Z_MostSimilarPop,
-              Overall_Percentile
-            )
-          )
-        all_subset_summaries[[i]] <- subset_text_data\\\$Summary
+        # Write CSV files directly for this sample
+        sample_dir <- paste0('sample_', sample_prefix)
+        dir.create(sample_dir, showWarnings = FALSE)
+        
+        # Write subset summaries for this sample
+        subset_summary_data <- run_patient_data_sub %>%
+          dplyr::select(IID, PGS, Z_MostSimilarPop) %>%
+          dplyr::distinct()
+        readr::write_csv(subset_summary_data, file.path(sample_dir, 'subset_summaries.csv'))
+        
+        # Write subset PGS data for this sample
+        subset_pgs_data <- scores_sub %>%
+          dplyr::filter(sampleset != 'reference')
+        readr::write_csv(subset_pgs_data, file.path(sample_dir, 'pgs_subset.csv'))
         
       # Write temporary data files for this sample's subset reports
-      # Note: We write scores_sub (filtered by sample and PGS) for subset-specific reports
-      # This includes all reference samples for the specific PGS IDs, ensuring density plots work
+      # Note: We write scores_sub (reference + patient data for specific PGS IDs) for subset-specific reports
+      # This ensures correct percentile calculations and density plots work
       readr::write_tsv(scores_sub, gzfile('subset/pgs.txt.gz'))
       readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
       
@@ -269,26 +237,7 @@ process GENERATE_REPORTS {
       }
       }
       
-      # Write combined subset artifacts
-      if (length(all_subset_scores) > 0) {
-        combined_scores <- dplyr::bind_rows(all_subset_scores)
-        readr::write_tsv(combined_scores, gzfile('subset/pgs.txt.gz'))
-        readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
-        scores_sub_filtered <- dplyr::filter(combined_scores, sampleset != 'reference')
-        readr::write_csv(scores_sub_filtered, 'subset/pgs_subset.csv')
-        
-        # Write combined summaries
-        writeLines(unlist(all_subset_summaries), 'subset/patient_summaries.csv')
-        
-        # Create subset summary table
-        subset_summary_data <- dplyr::bind_rows(all_subset_scores) %>%
-          dplyr::filter(sampleset != 'reference') %>%
-          dplyr::select(IID, PGS, Z_MostSimilarPop) %>%
-          dplyr::distinct()
-        
-        readr::write_csv(subset_summary_data, 'subset/subset_summaries.csv')
-        print('Subset reports generation completed')
-      }
+      print('Subset reports generation completed')
     }
   EOF
 
@@ -302,43 +251,52 @@ process ORGANIZE_REPORTS {
     publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
     
     input:
-    path(patient_reports)
-    path(patient_summaries)
     path(subset_reports)
     path(subset_summaries)
     path(subset_pgs)
     
     output:
-    path "overall_reports/patient*.html"
-    path "patient_summaries.csv"
-    path "subset/subset_reports/patient*subset_report.html", optional: true
-    path "subset/subset_summaries.csv", optional: true
-    path "subset/pgs_subset.csv", optional: true
+    path "results/sample_*/patient*subset_report.html", optional: true
+    path "results/sample_*/subset_summaries.csv", optional: true
+    path "results/sample_*/pgs_subset.csv", optional: true
     
     script:
     """
-    mkdir -p overall_reports
-    mkdir -p subset/subset_reports
+    # Create results directory structure
+    mkdir -p results
     
-    for report in ${patient_reports}; do
-        cp "\$report" overall_reports/
-    done
-    
+    # Process subset reports - organize by sample ID
     if [ -n "${subset_reports}" ]; then
         for report in ${subset_reports}; do
-            cp "\$report" subset/subset_reports/
+            # Extract sample ID from filename (e.g., patient_24-1979_subset_report.html -> 24-1979)
+            sample_id=\$(basename "\$report" | sed 's/patient_\\([^_]*\\)_subset_report\\.html/\\1/')
+            mkdir -p "results/sample_\${sample_id}"
+            cp "\$report" "results/sample_\${sample_id}/"
         done
     fi
     
+    # Process subset summaries - files are already organized by sample
     if [ -n "${subset_summaries}" ]; then
-        cp ${subset_summaries} subset/subset_summaries.csv
+        for csv_file in ${subset_summaries}; do
+            # Extract sample ID from directory name (e.g., sample_24-1979/subset_summaries.csv -> 24-1979)
+            sample_id=\$(dirname "\$csv_file" | sed 's/sample_\\(.*\\)/\\1/')
+            mkdir -p "results/sample_\${sample_id}"
+            cp "\$csv_file" "results/sample_\${sample_id}/"
+        done
     fi
     
+    # Process subset PGS data - files are already organized by sample
     if [ -n "${subset_pgs}" ]; then
-        cp ${subset_pgs} subset/pgs_subset.csv
+        for csv_file in ${subset_pgs}; do
+            # Extract sample ID from directory name (e.g., sample_24-1979/pgs_subset.csv -> 24-1979)
+            sample_id=\$(dirname "\$csv_file" | sed 's/sample_\\(.*\\)/\\1/')
+            mkdir -p "results/sample_\${sample_id}"
+            cp "\$csv_file" "results/sample_\${sample_id}/"
+        done
     fi
     """
 }
+
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -401,12 +359,10 @@ workflow {
     // Generate reports using separate PGS and population files
     GENERATE_REPORTS(ch_pgs_file, ch_pop_file, file(params.report_template), ch_sample_pgs_mapping)
     
-    // Organize the output files into proper directory structure
+    // Organize the output files into proper directory structure by sample ID
     ORGANIZE_REPORTS(
-        GENERATE_REPORTS.out[0],  // patient*.html
-        GENERATE_REPORTS.out[1],  // patient_summaries.csv
-        GENERATE_REPORTS.out[2],  // subset/patient*subset_report.html
-        GENERATE_REPORTS.out[3],  // subset/subset_summaries.csv
-        GENERATE_REPORTS.out[4]   // subset/pgs_subset.csv
+        GENERATE_REPORTS.out[0],  // subset/patient*subset_report.html
+        GENERATE_REPORTS.out[1],   // subset/subset_summaries.csv
+        GENERATE_REPORTS.out[2]    // subset/pgs_subset.csv
     )
 }
