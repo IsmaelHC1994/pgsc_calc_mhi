@@ -54,7 +54,7 @@ process GENERATE_REPORTS {
     path(sample_pgs_mapping), stageAs: 'sample_pgs_mapping.csv'
     
     output:
-    path "subset/patient*subset_report.html", optional: true
+    path "subset_reports/patient*subset_report.html", optional: true
     path "sample_*/subset_summaries.csv", optional: true
     path "sample_*/pgs_subset.csv", optional: true
     
@@ -134,14 +134,13 @@ process GENERATE_REPORTS {
         if (dir.exists('subset')) {
           unlink('subset', recursive = TRUE)
         }
-        dir.create('subset', showWarnings = FALSE)
-        dir.create('subset/subset_reports', showWarnings = FALSE)
+        dir.create('subset_reports', showWarnings = FALSE)
       
-      # Copy FontAwesome font and template to subset folder once
+      # Copy FontAwesome font and template to subset_reports folder once
       if (file.exists('fontawesome-webfont.ttf')) {
-        file.copy('fontawesome-webfont.ttf', 'subset/fontawesome-webfont.ttf', overwrite = TRUE)
+        file.copy('fontawesome-webfont.ttf', 'subset_reports/fontawesome-webfont.ttf', overwrite = TRUE)
       }
-      file.copy('working_patient_report_template.qmd', 'subset/working_patient_report_template.qmd', overwrite = TRUE)
+      file.copy('working_patient_report_template.qmd', 'subset_reports/working_patient_report_template.qmd', overwrite = TRUE)
       
       # Collect all subset data across samples
       all_subset_scores <- list()
@@ -220,8 +219,8 @@ process GENERATE_REPORTS {
       # Write temporary data files for this sample's subset reports
       # Note: We write scores_sub (reference + patient data for specific PGS IDs) for subset-specific reports
       # This ensures correct percentile calculations and density plots work
-      readr::write_tsv(scores_sub, gzfile('subset/pgs.txt.gz'))
-      readr::write_tsv(pop_all, gzfile('subset/popsimilarity.txt.gz'))
+      readr::write_tsv(scores_sub, gzfile('subset_reports/pgs.txt.gz'))
+      readr::write_tsv(pop_all, gzfile('subset_reports/popsimilarity.txt.gz'))
       
       # Generate subset reports for this sample's patients
       ids <- run_patient_data_sub %>%
@@ -230,38 +229,18 @@ process GENERATE_REPORTS {
         unique()
       
       if (length(ids) > 0) {
-        owd <- getwd(); setwd('subset/subset_reports'); on.exit(setwd(owd), add = TRUE)
+        owd <- getwd(); setwd('subset_reports'); on.exit(setwd(owd), add = TRUE)
         for (pid in ids) {
           print(sprintf('Generating subset report for patient %s...', pid))
-          quarto::quarto_render('../working_patient_report_template.qmd', 
+          quarto::quarto_render('working_patient_report_template.qmd', 
                                 output_file = paste0('patient_', pid, '_subset_report.html'), 
                                 execute_params = list(patient_id = pid))
-          
-          # The file might be in subset/ instead of subset/subset_reports/
-          report_file <- paste0('patient_', pid, '_subset_report.html')
-          subset_report_path <- file.path('..', report_file)
-          
-          # Check if file exists in current directory or parent subset directory
-          if (file.exists(report_file)) {
-            # File is in subset/subset_reports/
-            file.copy(report_file, file.path('..', '..', sample_dir, report_file), overwrite = TRUE)
-            file.remove(report_file)
-          } else if (file.exists(subset_report_path)) {
-            # File is in subset/
-            file.copy(subset_report_path, file.path('..', '..', sample_dir, report_file), overwrite = TRUE)
-            file.remove(subset_report_path)
-          }
         }
         setwd(owd)
       }
       }
       
       print('Subset reports generation completed')
-      
-      # Clean up: remove the subset directory since we've moved everything to sample_* directories
-      if (dir.exists('subset')) {
-        unlink('subset', recursive = TRUE)
-      }
     }
     EOF
 
