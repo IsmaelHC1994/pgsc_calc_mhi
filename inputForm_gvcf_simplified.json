@@ -95,7 +95,7 @@
         "dataType": "file"
       },
       "maxValues": 1,
-      "minValues": 0
+      "minValues": 1
     },
     {
       "id": "scorefile_custom",
