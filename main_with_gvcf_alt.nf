@@ -254,6 +254,7 @@ process GENERATE_REPORTS {
         }
         setwd(owd)
       }
+      }
       
       print('Subset reports generation completed')
       
@@ -262,7 +263,7 @@ process GENERATE_REPORTS {
         unlink('subset', recursive = TRUE)
       }
     }
-  EOF
+    EOF
 
     # Run the R script
     Rscript generate_reports.R
