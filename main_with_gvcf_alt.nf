@@ -52,7 +52,7 @@ process GENERATE_REPORTS {
     path pop_file
     path report_template
     path sample_pgs_mapping, stageAs: 'sample_pgs_mapping.csv'
-    path log_scorefiles, optional: true
+    path log_scorefiles
     
     output:
     path "subset_reports/patient*subset_report.html", optional: true
