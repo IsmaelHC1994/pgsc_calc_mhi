@@ -48,11 +48,11 @@ process GENERATE_REPORTS {
     publishDir "${params.outdir}/${params.sampleset}/results", mode: 'copy', overwrite: true
     
     input:
-    path(pgs_file)
-    path(pop_file)
-    path(report_template)
-    path(sample_pgs_mapping), stageAs: 'sample_pgs_mapping.csv'
-    path(log_scorefiles), optional: true
+    path pgs_file
+    path pop_file
+    path report_template
+    path sample_pgs_mapping, stageAs: 'sample_pgs_mapping.csv'
+    path log_scorefiles, optional: true
     
     output:
     path "subset_reports/patient*subset_report.html", optional: true
@@ -301,7 +301,7 @@ workflow {
     ancestry_results_channel = PGSCCALC.out.ancestry_results.map { meta, file -> file }.flatten()
     
     // Get log_scorefiles from PGSCCALC (contains metadata for PGS Catalog scores)
-    ch_log_scorefiles = PGSCCALC.out.log_scorefiles.first()
+    ch_log_scorefiles = PGSCCALC.out.log_scorefiles
     
     // Create separate channels for PGS and population files
     ch_pgs_file = score_files_channel.filter { it.toString().endsWith('pgs.txt.gz') }.first()

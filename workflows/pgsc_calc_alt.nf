@@ -334,7 +334,7 @@ workflow PGSCCALC {
                         }
                     }
                 }
-                csv_pgs_ids = all_pgs_ids.join(' ')
+                csv_pgs_ids = all_pgs_ids.join(',')
                 log.info "Unique PGS IDs from CSV: ${csv_pgs_ids}"
             } else {
                 log.warn "Sample PGS mapping file not found: ${params.sample_pgs_mapping}"
@@ -342,7 +342,7 @@ workflow PGSCCALC {
         }
         
         // Merge CSV PGS IDs with params.pgs_id
-        def combined_pgs_id = [params.pgs_id, csv_pgs_ids].findAll { it }.join(' ')
+        def combined_pgs_id = [params.pgs_id, csv_pgs_ids].findAll { it }.join(',')
         
         // make sure accessions look sensible before querying PGS Catalog
         def pgs_id = WorkflowPgscCalc.prepareAccessions(combined_pgs_id, "pgs_id")
