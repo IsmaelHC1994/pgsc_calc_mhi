@@ -52,6 +52,7 @@ process GENERATE_REPORTS {
     path(pop_file)
     path(report_template)
     path(sample_pgs_mapping), stageAs: 'sample_pgs_mapping.csv'
+    path(log_scorefiles), optional: true
     
     output:
     path "subset_reports/patient*subset_report.html", optional: true
@@ -261,13 +262,16 @@ workflow {
     
     // Handle scorefile folder input if provided
     ch_collected_scorefiles = Channel.empty()
+    ch_log_scorefiles = Channel.empty()
     if (params.scorefile_custom) {
         // Use the zip file directly
         COLLECT_SCOREFILES(file(params.scorefile_custom))
         ch_collected_scorefiles = COLLECT_SCOREFILES.out.scorefiles
+        ch_log_scorefiles = COLLECT_SCOREFILES.out.log_scorefiles
     } else {
         // Create a dummy channel for when no scorefiles are collected
         ch_collected_scorefiles = Channel.value(file('NO_FILE'))
+        ch_log_scorefiles = Channel.empty()
     }
     
     // Validate that at least one source of scoring files is provided
@@ -299,6 +303,9 @@ workflow {
     score_files_channel = PGSCCALC.out.score_files.map { meta, file -> file }.flatten()
     ancestry_results_channel = PGSCCALC.out.ancestry_results.map { meta, file -> file }.flatten()
     
+    // Get log_scorefiles from PGSCCALC (contains metadata for PGS Catalog scores)
+    ch_log_scorefiles = PGSCCALC.out.log_scorefiles.first()
+    
     // Create separate channels for PGS and population files
     ch_pgs_file = score_files_channel.filter { it.toString().endsWith('pgs.txt.gz') }.first()
     ch_pop_file = ancestry_results_channel.filter { it.toString().endsWith('popsimilarity.txt.gz') }.first()
@@ -309,5 +316,5 @@ workflow {
         Channel.value(file('NO_FILE'))
     
     // Generate reports using separate PGS and population files
-    GENERATE_REPORTS(ch_pgs_file, ch_pop_file, file(params.report_template), ch_sample_pgs_mapping)
+    GENERATE_REPORTS(ch_pgs_file, ch_pop_file, file(params.report_template), ch_sample_pgs_mapping, ch_log_scorefiles)
 }

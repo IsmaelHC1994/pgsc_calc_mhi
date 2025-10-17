@@ -83,12 +83,24 @@ report_date <- format(Sys.Date(), "%Y-%m-%d")
 # Set paths
 score_files <- list.files(".", pattern = "pgs.txt", full.names = FALSE)
 popsim_files <- list.files(".", pattern = "popsimilarity.txt", full.names = FALSE)
+metadata_file <- list.files(".", pattern = "log_scorefiles.json", full.names = FALSE)
 
 # Load score data
 scores <- read_tsv(file.path(score_files))
 
 # Load popsim data
 popsim <- read_tsv(file.path(popsim_files))
+
+# Load PGS metadata if available
+pgs_metadata <- NULL
+if (length(metadata_file) > 0) {
+  tryCatch({
+    pgs_metadata <- jsonlite::fromJSON(metadata_file[1], simplifyVector = FALSE)
+    message("Loaded PGS metadata for ", length(pgs_metadata), " scoring files")
+  }, error = function(e) {
+    message("Could not load PGS metadata: ", e$message)
+  })
+}
 
 # Get basic stats
 n_scores <- length(unique(scores$PGS))
@@ -143,13 +155,34 @@ patient_pgs_list <- scores_popsim %>%
   pull(PGS) %>%
   unique()
 
-# Create bulleted list of PRS scores with formatted names
-# Format: PGS000016_hmPOS_GRCh38 -> PGS000016 (GRCh38)
-formatted_pgs_list <- patient_pgs_list %>%
-  str_replace("^(PGS\\d+).*_(GRCh\\d+)$", "\\1 (\\2)") %>%
-  str_replace("^(PGS\\d+).*", "\\1")  # fallback for other formats
+# Function to get PGS metadata
+get_pgs_metadata <- function(pgs_id) {
+  if (is.null(pgs_metadata)) return(NULL)
+  
+  # Find matching metadata entry
+  for (entry in pgs_metadata) {
+    if (entry$pgs_id == pgs_id) {
+      return(entry)
+    }
+  }
+  return(NULL)
+}
 
-pgs_bullet_list <- paste0("- **", formatted_pgs_list, "**", collapse = "\n")
+# Create bulleted list of PRS scores with formatted names and metadata
+formatted_pgs_list <- c()
+for (pgs_id in patient_pgs_list) {
+  metadata <- get_pgs_metadata(pgs_id)
+  if (!is.null(metadata) && metadata$header$pgs_name != "") {
+    # Use metadata name if available (PGS Catalog scores)
+    formatted_name <- paste0("**", pgs_id, "** (", metadata$header$pgs_name, ")")
+  } else {
+    # Fallback to original formatting (custom scores)
+    formatted_name <- paste0("**", str_replace(pgs_id, "^(PGS\\d+).*", "\\1"), "**")
+  }
+  formatted_pgs_list <- c(formatted_pgs_list, formatted_name)
+}
+
+pgs_bullet_list <- paste0("- ", formatted_pgs_list, collapse = "\n")
 ```
 
 
@@ -307,7 +340,7 @@ Les poids dérivés des scores polygéniques suivants ont été utilisés dans c
 
 `r pgs_bullet_list`
 
-Ces scores peuvent être consultés dans l'entrée correspondante du [Polygenic Score Catalog](https://www.pgscatalog.org/): **https://www.pgscatalog.org/**
+`r if (!is.null(pgs_metadata)) { "Ces scores peuvent être consultés dans l'entrée correspondante du [Polygenic Score Catalog](https://www.pgscatalog.org/): **https://www.pgscatalog.org/**" } else { "**Note:** Certains scores proviennent de fichiers de scores personnalisés. Pour plus d'informations, veuillez consulter la source de ces fichiers." }`
 
 Ce score a été ajusté avec le Z-score de la population la plus similaire (Z_MostSimilarPop) en utilisant [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) version 2.0.1 [^1].
 :::
@@ -364,8 +397,32 @@ knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c",
 
 # Loop through each PRS score and create a section for it
 for (pgs_id in patient_pgs_scores) {
-  # Create section header
-  cat("\n\n## Analyse du score PRS:", pgs_id, "\n\n")
+  # Get metadata for this PGS
+  metadata <- get_pgs_metadata(pgs_id)
+  
+  # Create section header with metadata
+  if (!is.null(metadata) && metadata$header$pgs_name != "") {
+    # PGS Catalog score with metadata
+    cat("\n\n## Analyse du score PRS:", metadata$header$pgs_name, "\n\n")
+    cat("**Identifiant PGS:**", pgs_id, "\n\n")
+    
+    # Add trait information if available
+    if (metadata$header$trait_reported != "") {
+      cat("**Trait étudié:**", metadata$header$trait_reported, "\n\n")
+    }
+    
+    # Add citation if available
+    if (metadata$header$citation != "") {
+      cat("**Référence:**", metadata$header$citation, "\n\n")
+    }
+  } else {
+    # Custom score without metadata
+    cat("\n\n## Analyse du score PRS:", pgs_id, "\n\n")
+    cat("::: {.callout-note}\n")
+    cat("**Score personnalisé:** Ce score provient d'un fichier de score personnalisé.\n")
+    cat("Pour plus d'informations sur ce score, veuillez consulter la source du fichier de score personnalisé.\n")
+    cat(":::\n\n")
+  }
   
   # NEW: Bell curve risk visualization
   cat("\n\n### Évaluation du risque génétique pour", pgs_id, "\n\n")

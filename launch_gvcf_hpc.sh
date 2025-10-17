@@ -14,10 +14,20 @@ module load apptainer
 
 # cvs example for testing
 cat > sample_mapping.csv << EOF
-sample_id,score1,score2
-24-1979,brugadaMTAG
-24-1550i,brugadaMTAG,hcmMTAG
+sample_id,score1,score2,score3,score4,score5,score6
+24-1979,brugadaMTAG,PGS001779,PGS004911,PGS004862,PGS005168,PGS002276,
+24-1550i,hcmMTAG,PGS001779,PGS004911,PGS004862,PGS005168,PGS002276,
 EOF
+
+# custom HCM scoring file:
+# HCM latest:
+#  
+# pgs ids to test: 
+# PGS004911: HCM (MTAG)
+# PGS004862: DCM
+# PGS001779: Brugada
+# PGS005168: AF
+# PGS002276: Long-QT
 
 # Run the Nextflow command and pipe output to tee for both display and logging
 nextflow run main_with_gvcf_alt.nf \
@@ -26,6 +36,7 @@ nextflow run main_with_gvcf_alt.nf \
     --sampleset gvcfTestmultiple \
     --gvcf_files "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/24-1550i.hard-filtered.gvcf.gz /home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/24-1979.hard-filtered.gvcf.gz" \
     --reference_genome "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/hg38.fa.gz" \
+    --pgs_id PGS005168,PGS002276,PGS004862,PGS004911,PGS001779 \
     --scorefile_custom "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/assets/qc/scores/scores.tar.gz" \
     --sample_pgs_mapping "sample_mapping.csv" \
     --report_template "/home/ihcasti/wd/mhi-prs/run_pgsc_2_01/bin/patient_report_template.qmd" \
