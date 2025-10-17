@@ -262,16 +262,13 @@ workflow {
     
     // Handle scorefile folder input if provided
     ch_collected_scorefiles = Channel.empty()
-    ch_log_scorefiles = Channel.empty()
     if (params.scorefile_custom) {
         // Use the zip file directly
         COLLECT_SCOREFILES(file(params.scorefile_custom))
         ch_collected_scorefiles = COLLECT_SCOREFILES.out.scorefiles
-        ch_log_scorefiles = COLLECT_SCOREFILES.out.log_scorefiles
     } else {
         // Create a dummy channel for when no scorefiles are collected
         ch_collected_scorefiles = Channel.value(file('NO_FILE'))
-        ch_log_scorefiles = Channel.empty()
     }
     
     // Validate that at least one source of scoring files is provided

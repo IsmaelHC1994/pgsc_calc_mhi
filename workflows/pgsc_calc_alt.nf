@@ -570,6 +570,7 @@ workflow PGSCCALC {
         // Add these new emit statements to expose score files and ancestry information
         score_files = (run_report && run_apply_score) ? REPORT.out.score_files : (run_apply_score ? APPLY_SCORE.out.scores : Channel.empty())
         ancestry_results = (run_ancestry_assign && run_report && run_apply_score) ? REPORT.out.ancestry_results : Channel.empty()
+        log_scorefiles = ch_log_scorefiles
 }
 
 /*
