@@ -150,14 +150,7 @@ process GENERATE_REPORTS {
       # Process each sample individually
       for (i in 1:nrow(mapping_df)) {
         sample_prefix <- as.character(mapping_df[i, 1])
-        # Extract PGS IDs from columns 2 onwards, handling each column separately
-        pgs_ids_for_sample <- c()
-        for (col_idx in 2:ncol(mapping_df)) {
-          pgs_id <- as.character(mapping_df[i, col_idx])
-          if (!is.na(pgs_id) && trimws(pgs_id) != "") {
-            pgs_ids_for_sample <- c(pgs_ids_for_sample, trimws(pgs_id))
-          }
-        }
+        pgs_ids_for_sample <- as.character(mapping_df[i, -1]) %>% na.omit() %>% trimws()
         
         if (length(pgs_ids_for_sample) == 0) {
           warning('No PGS IDs for sample ', sample_prefix, '; skipping')
