@@ -1,6 +1,6 @@
 process FILTER_VARIANTS {
     // labels are defined in conf/modules.config
-    label 'process_low'
+    label 'process_high'
     label 'plink2' // controls conda, docker, + singularity options
 
     tag "$meta.id $params.target_build"
