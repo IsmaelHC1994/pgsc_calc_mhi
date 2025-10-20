@@ -347,7 +347,7 @@ if (length(custom_scores) > 0) {
   for (score in custom_scores) {
     cat("- **", score, "** *[Score personnalisé]*\n")
   }
-  cat("\n")
+  cat("\n**Note:** Pour plus d'informations sur ces scores personnalisés, veuillez consulter la source des fichiers de score.\n\n")
 }
 ```
 
@@ -417,25 +417,7 @@ if (!is.null(pgs_metadata)) {
         })
       )
     
-    # Add custom scores (those not in Catalog metadata)
-    # Get base IDs from patient list and check which ones don't have metadata
-    patient_base_ids_actual <- stringr::str_replace(patient_pgs_list, "^(PGS[0-9]+).*", "\\1")
-    catalog_base_ids <- purrr::map_chr(json_list_patient, "pgs_id")
-    custom_scores <- patient_pgs_list[!patient_base_ids_actual %in% catalog_base_ids]
-    if (length(custom_scores) > 0) {
-      custom_metadata <- tibble::tibble(
-        pgs_id = custom_scores,
-        pgs_name = "",
-        pgp_id = "",
-        citation = "",
-        reported_trait = "Score personnalisé",
-        n_variants = "",
-        genome_build = "Check source" # Default assumption
-      )
-      scorefile_metadata <- dplyr::bind_rows(catalog_metadata, custom_metadata)
-    } else {
-      scorefile_metadata <- catalog_metadata
-    }
+    scorefile_metadata <- catalog_metadata
     
     scorefile_metadata <- scorefile_metadata %>%
       dplyr::select(pgs_id, pgp_id, trait_display, n_variants, genome_build) %>%
