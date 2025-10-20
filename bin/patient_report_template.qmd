@@ -345,9 +345,9 @@ custom_scores <- patient_pgs_list[!stringr::str_detect(patient_pgs_list, "^PGS[0
 if (length(custom_scores) > 0) {
   cat("**Scores personnalisés utilisés:**\n\n")
   for (score in custom_scores) {
-    cat("- **", score, "** *[Score personnalisé]*\n")
+    cat("- **", score, "** *[Score personnalisé: Consulter la source]*\n")
   }
-  cat("\n**Note:** Pour plus d'informations sur ces scores personnalisés, veuillez consulter la source des fichiers de score.\n\n")
+  cat("\n")
 }
 ```
 
