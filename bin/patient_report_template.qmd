@@ -340,6 +340,18 @@ Les poids dérivés des scores polygéniques suivants ont été utilisés dans c
 `r pgs_bullet_list`
 
 ```{r, echo=FALSE, warning=FALSE}
+# Simple outline for custom scores
+custom_scores <- patient_pgs_list[!stringr::str_detect(patient_pgs_list, "^PGS[0-9]+")]
+if (length(custom_scores) > 0) {
+  cat("**Scores personnalisés utilisés:**\n\n")
+  for (score in custom_scores) {
+    cat("- **", score, "** *[Score personnalisé]*\n")
+  }
+  cat("\n")
+}
+```
+
+```{r, echo=FALSE, warning=FALSE}
 # If metadata is available, display a compact table like the Catalog report, but
 # restricted to the scores used for this patient
 if (!is.null(pgs_metadata)) {
