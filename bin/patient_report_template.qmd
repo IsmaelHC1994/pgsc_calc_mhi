@@ -176,7 +176,9 @@ for (pgs_id in patient_pgs_list) {
   if (!is.null(metadata) && metadata$header$pgs_name != "") {
     formatted_name <- paste0("**", base_id, "** (", metadata$header$pgs_name, ")")
   } else {
-    formatted_name <- paste0("**", base_id, "** *[Score personnalisé]*")
+    # Extract the part after the underscore for custom scores
+    custom_name <- str_replace(pgs_id, ".*_(.+)", "\\1")
+    formatted_name <- paste0("**", pgs_id, "** (", custom_name, ") *[Score personnalisé: Consulter la source]*")
   }
   formatted_pgs_list <- c(formatted_pgs_list, formatted_name)
 }
@@ -338,18 +340,6 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
 Les poids dérivés des scores polygéniques suivants ont été utilisés dans ce rapport :
 
 `r pgs_bullet_list`
-
-```{r, echo=FALSE, warning=FALSE}
-# Simple outline for custom scores
-custom_scores <- patient_pgs_list[!stringr::str_detect(patient_pgs_list, "^PGS[0-9]+")]
-if (length(custom_scores) > 0) {
-  cat("**Scores personnalisés utilisés:**\n\n")
-  for (score in custom_scores) {
-    cat("- **", score, "** *[Score personnalisé: Consulter la source]*\n")
-  }
-  cat("\n")
-}
-```
 
 ```{r, echo=FALSE, warning=FALSE}
 # If metadata is available, display a compact table like the Catalog report, but
