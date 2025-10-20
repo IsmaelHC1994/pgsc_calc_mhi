@@ -176,7 +176,7 @@ for (pgs_id in patient_pgs_list) {
   if (!is.null(metadata) && metadata$header$pgs_name != "") {
     formatted_name <- paste0("**", base_id, "** (", metadata$header$pgs_name, ")")
   } else {
-    formatted_name <- paste0("**", base_id, "**")
+    formatted_name <- paste0("**", base_id, "** *[Score personnalisé]*")
   }
   formatted_pgs_list <- c(formatted_pgs_list, formatted_name)
 }
@@ -352,10 +352,19 @@ if (!is.null(pgs_metadata)) {
   link_pgscatalog <- function(id, link_type) {
     if (id != "") stringr::str_glue('<a href="https://www.pgscatalog.org/{link_type}/{id}">{id}</a>') else id
   }
+  
+  add_note <- function(id, note) {
+    if (id != "" && note != "") {
+      return(stringr::str_glue("{id} <br /> <small>{note}</small>"))
+    } else {
+      return(id)
+    }
+  }
   # filter json entries to those used in this patient
   json_list_patient <- purrr::keep(json_list, ~ .x$pgs_id %in% patient_base_ids)
   if (length(json_list_patient) > 0) {
-    scorefile_metadata <- tibble::tibble(
+    # Create metadata table for Catalog scores
+    catalog_metadata <- tibble::tibble(
       pgs_id = purrr::map_chr(json_list_patient, "pgs_id"),
       pgs_name = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "pgs_name")),
       pgp_id = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "pgp_id")),
@@ -365,10 +374,30 @@ if (!is.null(pgs_metadata)) {
       genome_build = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "genome_build"))
     ) %>%
       dplyr::mutate(
-        pgs_id = purrr::map_chr(pgs_id, ~ link_pgscatalog(.x, "score")),
-        pgp_id = purrr::map_chr(pgp_id, ~ link_pgscatalog(.x, "publication"))
-      ) %>%
-      dplyr::select(pgs_id, pgp_id, reported_trait, n_variants, genome_build)
+        pgs_id = purrr::map2_chr(pgs_id, pgs_name, ~ add_note(link_pgscatalog(.x, "score"), .y)),
+        pgp_id = purrr::map2_chr(pgp_id, citation, ~ add_note(link_pgscatalog(.x, "publication"), .y))
+      )
+    
+    # Add custom scores (those not in Catalog metadata)
+    custom_scores <- patient_pgs_list[!stringr::str_replace(patient_pgs_list, "^(PGS[0-9]+).*", "\\1") %in% catalog_metadata$pgs_id]
+    if (length(custom_scores) > 0) {
+      custom_metadata <- tibble::tibble(
+        pgs_id = custom_scores,
+        pgs_name = "",
+        pgp_id = "",
+        citation = "",
+        reported_trait = "Score personnalisé",
+        n_variants = "",
+        genome_build = "Check source" # Default assumption
+      )
+      scorefile_metadata <- dplyr::bind_rows(catalog_metadata, custom_metadata)
+    } else {
+      scorefile_metadata <- catalog_metadata
+    }
+    
+    scorefile_metadata <- scorefile_metadata %>%
+      dplyr::select(pgs_id, pgp_id, reported_trait, n_variants, genome_build) %>%
+      dplyr::arrange(pgs_id)
     # Render table
     if (requireNamespace("DT", quietly = TRUE)) {
       DT::datatable(scorefile_metadata, rownames = FALSE, escape = FALSE,
