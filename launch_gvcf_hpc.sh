@@ -14,9 +14,9 @@ module load apptainer
 
 # cvs example for testing
 cat > sample_mapping.csv << EOF
-sample_id,score1,score2,score3,score4,score5,score6
-24-1979,brugadaMTAG, PGS001779, PGS004911, PGS004862, PGS005168, PGS002276
-24-1550i,hcmMTAG, PGS001779, PGS004911, PGS004862, PGS005168, PGS002276
+sample_id,score1,score2,score3,score4,score5,score6,score7
+24-1979,brugadaMTAG, PGS001779, PGS004911, PGS004862, PGS005168, PGS002276, HaydarlouHCM
+24-1550i,hcmMTAG, PGS001779, PGS004911, PGS004862, PGS005168, PGS002276, HaydarlouHCM
 EOF
 
     # --pgs_id PGS005168,PGS002276,PGS004862,PGS004911,PGS001779 \
