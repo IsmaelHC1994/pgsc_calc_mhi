@@ -72,6 +72,10 @@ process GENERATE_REPORTS {
     
     # Copy the provided template to work directory with a new name
     cp ${report_template} working_patient_report_template.qmd
+    # Copy PGS Catalog metadata json (if present) into working dir for the template
+    if [ -f ${log_scorefiles} ]; then
+      cp ${log_scorefiles} log_scorefiles.json
+    fi
 
     # Expose sample PGS mapping file to R
     export SAMPLE_PGS_MAPPING='${sample_pgs_mapping != 'NO_FILE' ? 'sample_pgs_mapping.csv' : ''}'
@@ -222,6 +226,10 @@ process GENERATE_REPORTS {
       # This ensures correct percentile calculations and density plots work
       readr::write_tsv(scores_sub, gzfile('subset_reports/pgs.txt.gz'))
       readr::write_tsv(pop_all, gzfile('subset_reports/popsimilarity.txt.gz'))
+      # Ensure metadata json is available where we render
+      if (file.exists('log_scorefiles.json')) {
+        file.copy('log_scorefiles.json', 'subset_reports/log_scorefiles.json', overwrite = TRUE)
+      }
       
       # Generate subset reports for this sample's patients
       ids <- run_patient_data_sub %>%
