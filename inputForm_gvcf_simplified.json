@@ -8,14 +8,12 @@
       "dataFilter": {
         "dataType": "file"
       },
-      "maxValues": 5,
+      "maxValues": 10,
       "minValues": 1
-     },
-
+    },
     {
       "id": "reference_genome",
-      "label": "Reference Genome (FASTA)",
-      "helpText": "FASTA for the reference genome being used (gz). Used during gvcf->vcf conversion. Recommended to use hg38.gz; hg19 is partially supported.",
+      "label": "Human Reference Genome (hg38.gz)",
       "type": "data",
       "dataFilter": {
         "dataType": "file"
@@ -24,9 +22,8 @@
       "minValues": 1
     },
     {
-      "id": "section_common_options",
-      "label": "Common Options",
-      "helpText": "Options used regardless of input type",
+      "id": "Required options",
+      "label": "Required options",
       "type": "section"
     },
     {
@@ -68,23 +65,9 @@
     },
     {
       "id": "section_scorefiles",
-      "label": "Scoring File Options",
-      "helpText": "Either upload a tar file with 1 or more scoring files (manually edited in pgscalc-format: https://pgsc-calc.readthedocs.io/en/latest/how-to/calculate_pgscatalog.html), or specify PGS Catalog IDs to download.",
+      "label": "PRS options",
+      "helpText": "User must upload a CSV file containing the sample ID prefix from the gVCF files followed by PGS IDs from the PGS catalog, as well as the label for custom scorefiles, if present (eg. 20-721,PGSXXX,HaydarlouHCM)",
       "type": "section"
-    },
-    {
-      "id": "target_build",
-      "label": "target_build",
-      "helpText": "Genome build of target genomes, by default GRCh38. GRCh37 is partially supported.",
-      "type": "textbox",
-      "value": "GRCh38"
-    },
-    {
-      "id": "pgs_id",
-      "label": "PGS Score IDs (Download)",
-      "helpText": "Comma-separated list of PGS score IDs to download from PGS Catalog, e.g. PGS000802,PGS000001. Alternative to uploading custom scores.",
-      "type": "textbox",
-      "value": ""
     },
     {
       "id": "sample_pgs_mapping",
@@ -99,8 +82,8 @@
     },
     {
       "id": "scorefile_custom",
-      "label": "Custom score file packaged in .tar (Upload)",
-      "helpText": "Tar file containing one or more scoring files in PGS Catalog format. Alternative to using PGS Catalog IDs.",
+      "label": "Custom score file packaged in .tar.gz (Upload)",
+      "helpText": "Tar.gz file containing one or more scoring files in PGS Catalog format. Optional, can be used with PGS Catalog IDs. Custom scoring files must be in pgscalc-format: https://pgsc-calc.readthedocs.io/en/latest/how-to/calculate_pgscatalog.html",
       "type": "data",
       "dataFilter": {
         "dataType": "file"
