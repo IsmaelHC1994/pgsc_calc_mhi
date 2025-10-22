@@ -56,7 +56,8 @@ process GENERATE_REPORTS {
     
     output:
     path "subset_reports/patient*subset_report.html", optional: true
-    path "subset_reports/*.txt.gz", optional: true
+    path pgs_file, optional: true
+    path pop_file, optional: true
     path "sample_*/subset_summaries.csv", optional: true
     path "sample_*/pgs_subset.csv", optional: true
     
@@ -138,10 +139,6 @@ process GENERATE_REPORTS {
           unlink('subset', recursive = TRUE)
         }
         dir.create('subset_reports', showWarnings = FALSE)
-
-      # Copy the original pgs_file and pop_file to subset_reports to be outputted along with the subset reports
-      file.copy('${pgs_file}', 'subset_reports/', overwrite = TRUE)
-      file.copy('${pop_file}', 'subset_reports/', overwrite = TRUE)
       
       # Copy FontAwesome font and template to subset_reports folder once
       if (file.exists('fontawesome-webfont.ttf')) {
