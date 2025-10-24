@@ -58,6 +58,7 @@ process GENERATE_REPORTS {
     path "subset_reports/patient*subset_report.html", optional: true
     path pgs_file, optional: true
     path pop_file, optional: true
+    path log_scorefiles, optional: true
     path "sample_*/subset_summaries.csv", optional: true
     path "sample_*/pgs_subset.csv", optional: true
     

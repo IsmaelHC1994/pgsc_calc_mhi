@@ -8,7 +8,7 @@
       "dataFilter": {
         "dataType": "file"
       },
-      "maxValues": 10,
+      "maxValues": 15,
       "minValues": 1
     },
     {
