@@ -1,5 +1,5 @@
 ---
-title: "PRS Rapport"
+title: "Analyse du risque polygénique "
 format:
   html:
     toc: true  # Add table of contents for multiple scores
@@ -28,6 +28,7 @@ library(tidyverse)  # Includes dplyr, ggplot2, etc.
 library(patchwork)  # For combining plots
 library(ggpubr)     # For publication-ready plots
 library(viridis)    # For color scales
+library(khroma)     # For Crameri color schemes
 
 # Text and formatting
 library(showtext)   # For custom fonts
@@ -53,7 +54,7 @@ nice_label <- function(x) {
     str_to_title()
 }
 
-# Create a publication-ready theme with scaled elements
+# Create a publication-like theme with scaled elements
 publication_theme <- function(base_size = 24) {
   theme_pubr(base_size = base_size) +
     theme(
@@ -75,10 +76,6 @@ report_date <- format(Sys.Date(), "%Y-%m-%d")
 ```
 
 ```{r load-data, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
-
-# test params$patient_id
-# assing 10003_10003 as test
-# params = list(patient_id = "10003")
 
 # Set paths
 score_files <- list.files(".", pattern = "pgs.txt", full.names = FALSE)
@@ -154,6 +151,12 @@ patient_pgs_list <- scores_popsim %>%
   filter(IID == full_patient_id) %>%
   pull(PGS) %>%
   unique()
+# Normalize to plain character and trim whitespace
+patient_pgs_list <- unique(trimws(as.character(patient_pgs_list)))
+
+# Build ordered list for section generation: PGS accessions first, custom scores last
+pgs_mask <- grepl('^PGS[0-9]+', patient_pgs_list, ignore.case = TRUE, perl = TRUE)
+patient_pgs_scores <- c(patient_pgs_list[pgs_mask], patient_pgs_list[!pgs_mask])
 
 # Function to get PGS metadata
 get_pgs_metadata <- function(pgs_id) {
@@ -167,23 +170,6 @@ get_pgs_metadata <- function(pgs_id) {
   }
   return(NULL)
 }
-
-# Create bulleted list of PRS scores with formatted names and metadata
-formatted_pgs_list <- c()
-for (pgs_id in patient_pgs_list) {
-  metadata <- get_pgs_metadata(pgs_id)
-  base_id <- str_replace(pgs_id, "^(PGS\\d+).*", "\\1")
-  if (!is.null(metadata) && metadata$header$pgs_name != "") {
-    formatted_name <- paste0("**", base_id, "** (", metadata$header$pgs_name, ")")
-  } else {
-    # Extract the part after the underscore for custom scores
-    custom_name <- str_replace(pgs_id, ".*_(.+)", "\\1")
-    formatted_name <- paste0("**", pgs_id, "** (", custom_name, ") *[Score personnalisé: Consulter la source]*")
-  }
-  formatted_pgs_list <- c(formatted_pgs_list, formatted_name)
-}
-
-pgs_bullet_list <- paste0("- ", formatted_pgs_list, collapse = "\n")
 ```
 
 
@@ -231,16 +217,155 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
   t_low <- qnorm(0.20)
   t_high <- qnorm(0.80)
   
+  # Create inverted roma color palette
+  roma_pal <- color("roma")
+  
+  # Map x values to color values (x ranges from -4 to 4, map to 0-1 for palette)
+  df_bell$color_value <- (df_bell$x + 4) / 8  # normalize to 0-1
+  
+  # Generate roma colors for gradient (inverted)
+  n_colors <- 100
+  roma_colors <- rev(roma_pal(n_colors))
+  
   p <- ggplot(df_bell, aes(x = x, y = y)) +
-    # Create smooth gradient using many small segments
+    # Create smooth gradient using roma colors
+    geom_segment(aes(x = x, xend = x, y = 0, yend = y, color = color_value), 
+                 size = 2.5, alpha = 0.9) +
+    scale_color_gradientn(
+      colours = roma_colors,
+      guide = "none"
+    ) +
+    # Bell curve outline
+    geom_line(color = "gray70", linewidth = 3, alpha = 0.9) +
+    # Visual thresholds (using gradient colors instead)
+    # geom_vline(xintercept = c(t_low, t_high), linetype = "dashed",
+    #            linewidth = 1.2, color = c("#5DADE2", "#E57373"), alpha = 0.6) +
+    
+    # Patient line (limited height to match bell curve, no arrow head)
+    annotate("segment", x = patient_x, xend = patient_x, 
+             y = 0, yend = max_y, color = patient_line_color, linewidth = 3) +
+    
+    # Add human icons in each risk zone using FontAwesome - positioned very close to x-axis
+    # Low risk (left) - use light color from roma
+    annotate("text", x = -2.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 22, color = roma_colors[1]) +  # light color from roma
+    annotate("text", x = -0.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 18, color = "gray50") +
+    annotate("text", x = 0, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 18, color = "gray50") +
+    annotate("text", x = 0.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 18, color = "gray50") +
+    # High risk (right) - use dark color from roma
+    annotate("text", x = 2.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 22, color = roma_colors[n_colors]) +  # dark color from roma
+    
+    # Patient marker icon - positioned at bell curve height
+    annotate("text", x = patient_x, y = max_y, 
+             label = if(use_fontawesome) "\uf007" else "●", 
+             family = if(use_fontawesome) "FontAwesome" else "sans",
+             size = 22, color = patient_line_color) +
+    # show "Vous" next to the marker line
+    annotate("text", x = patient_x + 0.05, y = max_y*0.92, label = "Vous",
+             color = "black", size = 12, hjust = 0, vjust = 0.5) +
+    
+    # Risk labels - positioned below the icons
+    annotate("text", x = -2.5, y = max_y*0.12, label = "Risque faible", size = 10) +
+    annotate("text", x = 0, y = max_y*0.12, label = "Risque moyen", size = 10) +
+    annotate("text", x = 2.5, y = max_y*0.12, label = "Risque élevé", size = 10) +
+    
+    # Text below the patient marker line - larger text
+    annotate("text", x = qnorm(patient_percentile/100), y = 0.45, 
+             label = paste0("Votre score polygénique est au ", round(patient_percentile), "e percentile"), 
+             color = "black", size = 7) +
+    
+    # Limit y-axis to include text and remove axis ticks
+    scale_y_continuous(limits = c(0, max_y), expand = expansion(mult = c(0, 0))) +
+    
+    # no grids and axis ticks
+    theme_pubr(base_size = 36) +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.title = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.title = element_text(size = 44, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 32, hjust = 0.5)
+    ) +
+    labs(
+      title = paste("Score de risque polygénique :", if(!is.null(pgs_id)) pgs_id else "Global")
+    ) +
+    # Labels for risk sections - positioned outside the curve for better visibility
+    annotate("text", x = -2.75, y = max_y*0.65, 
+             label = "Moins d'individus ont un risque réduit", 
+             size = 12, color = "#2E2E2E", fontface = "bold") +
+    annotate("text", x = 0, y = max_y*0.65, 
+             label = "La plupart des individus ont un risque moyen", 
+             size = 12, color = "#2E2E2E", fontface = "bold") +
+    annotate("text", x = 2.75, y = max_y*0.65, 
+             label = "Moins d'individus ont un risque accru", 
+             size = 12, color = "#2E2E2E", fontface = "bold") +
+    # Quantile-based x-axis; keep y scale from earlier (0..0.5)
+    scale_x_continuous(
+      limits = c(-4, 4),
+      breaks = qnorm(c(0, 0.05, 0.20, 0.50, 0.80, 0.95, 0.99)),
+      labels = c("0", "5th", "20th", "50th", "80th", "95th", "99th")
+    )
+
+  return(p)
+}
+
+create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
+  # Purple-to-red gradient version
+  filtered_data <- if (!is.null(pgs_id)) {
+    scores_popsim %>% dplyr::filter(PGS == pgs_id)
+  } else {
+    scores_popsim
+  }
+
+  if (nrow(filtered_data %>% dplyr::filter(IID == full_patient_id)) == 0) {
+    return(ggplot() + annotate("text", x = 0, y = 0, label = "Patient not found") + theme_void())
+  }
+
+  patient_percentile <- filtered_data %>%
+    dplyr::filter(IID == full_patient_id) %>%
+    dplyr::pull(Overall_Percentile)
+
+  # Build bell curve on a fixed grid for stable gradient
+  x_vals <- seq(-4, 4, length.out = 2001)
+  y_vals <- dnorm(x_vals)
+  df_bell <- tibble(x = x_vals, y = y_vals)
+  max_y <- max(df_bell$y)
+  patient_x <- qnorm(patient_percentile/100)
+  # pastel line color that contrasts with all three panels
+  patient_line_color <- "#8B5CF6"  # pastel violet
+  
+  # Percentile thresholds (20th and 80th)
+  t_low <- qnorm(0.20)
+  t_high <- qnorm(0.80)
+  
+  p <- ggplot(df_bell, aes(x = x, y = y)) +
+    # Create smooth gradient using very subtle purple progression
+    # Map: left (low risk) -> almost white lavender, right (high risk) -> medium lavender
     geom_segment(aes(x = x, xend = x, y = 0, yend = y, color = x), 
                  size = 2.5, alpha = 0.9) +
-    scale_color_gradient2(
-      low = "#F0E6FA",      # light lavender - low risk
-      mid = "#A020F0",      # medium purple - intermediate risk
-      high = "#5C008C",     # dark purple - high risk
-      midpoint = 0,         # center the gradient at x=0
-      guide = "none"
+    scale_color_gradientn(
+      colours = c(
+        "#F9F4FC",  # lightest purple - far left (low risk)
+        "#F9F4FC",  # very light purple
+        "#EEE0F7",  # light purple
+        "#E5D4F3",  # still light (middle point)
+        "#AB47BC",  # light-medium purple (just after middle, still not dark)
+        "#AB47BC",  # dark purple
+        "#7B1FA2"   # darkest purple (high risk)
+      ), guide = "none"
     ) +
     # Bell curve outline
     geom_line(color = "gray70", linewidth = 3, alpha = 0.9) +
@@ -253,9 +378,10 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
              y = 0, yend = max_y, color = patient_line_color, linewidth = 3) +
     
     # Add human icons in each risk zone using FontAwesome - positioned very close to x-axis
+    # Low risk (left) - use light color
     annotate("text", x = -2.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
-             size = 22, color = "#F0E6FA") +  # light lavender - low risk
+             size = 22, color = "#F3E5F5") +  # very light purple - low risk
     annotate("text", x = -0.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
              size = 18, color = "gray50") +
@@ -265,28 +391,29 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
     annotate("text", x = 0.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
              size = 18, color = "gray50") +
+    # High risk (right) - use dark color
     annotate("text", x = 2.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
-             size = 22, color = "#5C008C") +  # dark purple - high risk
+             size = 22, color = "#7B1FA2") +  # dark purple - high risk
     
     # Patient marker icon - positioned at bell curve height
     annotate("text", x = patient_x, y = max_y, 
              label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
              size = 22, color = patient_line_color) +
-    # show "You" next to the marker line
-    annotate("text", x = patient_x + 0.05, y = max_y*0.92, label = "You",
+    # show "Vous" next to the marker line
+    annotate("text", x = patient_x + 0.05, y = max_y*0.92, label = "Vous",
              color = "black", size = 12, hjust = 0, vjust = 0.5) +
     
     # Risk labels - positioned below the icons
-    annotate("text", x = -2.5, y = max_y*0.12, label = "Lower Risk", size = 9) +
-    annotate("text", x = 0, y = max_y*0.12, label = "Average Risk", size = 9) +
-    annotate("text", x = 2.5, y = max_y*0.12, label = "Higher Risk", size = 9) +
+    annotate("text", x = -2.5, y = max_y*0.12, label = "Risque faible", size = 10) +
+    annotate("text", x = 0, y = max_y*0.12, label = "Risque moyen", size = 10) +
+    annotate("text", x = 2.5, y = max_y*0.12, label = "Risque élevé", size = 10) +
     
     # Text below the patient marker line - larger text
     annotate("text", x = qnorm(patient_percentile/100), y = 0.45, 
-             label = paste0("Your polygenic score is in the ", round(patient_percentile), "th percentile"), 
-             color = "black", size = 6) +
+             label = paste0("Votre score polygénique est au ", round(patient_percentile), "e percentile"), 
+             color = "black", size = 7) +
     
     # Limit y-axis to include text and remove axis ticks
     scale_y_continuous(limits = c(0, max_y), expand = expansion(mult = c(0, 0))) +
@@ -305,19 +432,18 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
       plot.subtitle = element_text(size = 32, hjust = 0.5)
     ) +
     labs(
-      title = paste("Polygenic Risk Score:", if(!is.null(pgs_id)) pgs_id else "Overall"),
-      subtitle = "Normal Distribution with Risk Zones"
+      title = paste("Score de risque polygénique :", if(!is.null(pgs_id)) pgs_id else "Global")
     ) +
     # Labels for risk sections - positioned outside the curve for better visibility
     annotate("text", x = -2.75, y = max_y*0.65, 
-             label = "Fewer individuals have decreased risk", 
-             size = 11, color = "#2E2E2E", fontface = "bold") +
+             label = "Moins d'individus ont un risque réduit", 
+             size = 12, color = "#2E2E2E", fontface = "bold") +
     annotate("text", x = 0, y = max_y*0.65, 
-             label = "Most individuals have average risk", 
-             size = 11, color = "#2E2E2E", fontface = "bold") +
+             label = "La plupart des individus ont un risque moyen", 
+             size = 12, color = "#2E2E2E", fontface = "bold") +
     annotate("text", x = 2.75, y = max_y*0.65, 
-             label = "Fewer individuals have increased risk", 
-             size = 11, color = "#2E2E2E", fontface = "bold") +
+             label = "Moins d'individus ont un risque accru", 
+             size = 12, color = "#2E2E2E", fontface = "bold") +
     # Quantile-based x-axis; keep y scale from earlier (0..0.5)
     scale_x_continuous(
       limits = c(-4, 4),
@@ -331,21 +457,179 @@ create_bell_curve_risk_viz <- function(patient_id, pgs_id = NULL) {
 
 
 
-# Analyse du risque polygénique 
+<!-- # Analyse du risque polygénique  -->
 **Date d'émission :** `r report_date`
 
 ::: {.callout-note}
 ## Ce rapport contient l'analyse des scores de risque polygénique (PRS) pour le patient **`r params$patient_id`**.   
 
-Les poids dérivés des scores polygéniques suivants ont été utilisés dans ce rapport :
+:::
 
-`r pgs_bullet_list`
+::: {.callout-tip}
+## Qu'est-ce qu'un score de risque polygénique?
+
+Un score de risque polygénique est une estimation de votre risque génétique de développer une condition. Ce score est calculé à partir de nombreux  changements génétiques mineurs fréquents dans la population. Chacun de ces variants a un petit effet sur votre risque, mais tous ces effets peuvent être additionnés pour obtenir un score global, ce qui représente votre score de risque polygénique. Ce score n'est pas un diagnostic, et il ne peut pas prédire si vous développerez la condition. Il s'agit d'une estimation de votre risque comparativement au reste de la population.
+:::
+
+::: {.callout-tip}
+## Ce que ce résultat signifie pour vous
+*À compléter selon les besoins cliniques*; 
+
+***V.0.1, idea:***: Pour chaque score polygénique évalué, le profil génétique du patient est analysé en comparaison avec un groupe de référence génétiquement diversifié. Le percentile de risque final est déterminé en alignant le score individuel avec la population de référence présentant l'ascendance génétique la plus proche. Il est donc essentiel de se référer aux spécifications détaillées disponibles dans le Polygenic Score Catalog pour chaque score. La pertinence des estimations de risque pour d'autres populations est directement liée à leur ressemblance avec les cohortes initiales ayant servi à l'élaboration du modèle.
+:::
+
+::: {.callout-warning}
+## Limites des scores de risque polygéniques
+Les scores de risque polygénique ne prennent pas en compte tous les facteurs influençant le risque de développer une condition, comme par exemple des variants génétiques rares, l'âge, les antécédents médicaux, les habitudes de vie ou l'environnement. Ils servent d'indicateurs prédictifs et ne constituent pas un outil diagnostique. Ces scores comportent une marge d'incertitude significative; ainsi, un individu avec un score élevé peut ne jamais développer la condition, tandis qu'un individu avec un score faible peut développer la condition. <br />
+
+De plus, les scores de risque polygénique sont principalement basés sur des données génomiques d'individus d'origine européenne. Pour mieux tenir compte des différences génétiques entre différentes populations, une méthode d’ajustement basée sur l’ascendance est appliquée (PMID: 39327485). Cette correction améliore la généralisation des scores chez des individus de différentes origines, mais elle ne permet pas d'éliminer totalement le biais de généralisation. Les scores de risque polygéniques peuvent donc être moins fiables chez les personnes issues de populations non européennes.
+:::
+
+::: {.callout-caution}
+## À des fins de recherche uniquement
+
+Une validation par un laboratoire spécialisé en génétique et l'approbation du médecin traitant sont nécessaires avant toute décision médicale ou autre basée sur ces résultats. Ces analyses constituent des données de recherche préliminaires.
+:::
+
+[^1]: Lambert, S.A., Wingfield, B. et al. (2024) Enhancing the Polygenic Score Catalog with tools for score calculation and ancestry normalization. *Nature Genetics*. doi:10.1038/s41588-024-01937-x.
+
+::: {.callout-important}
+## Comment lire le graphique de risque polygénique?
+Le graphiques montre où se situe votre score de risque polygénique (ligne verticale) par rapport à la population générale. La plupart des personnes ont un score situé vers le centre de la courbe, ce qui correspond à un risque génétique moyen. Moins de personnes se trouvent aux extrémités. Un score plus à gauche indique un risque plus faible que la moyenne. Un score au centre indique un risque moyen. Un score plus à droite indique un risque plus élevé que la moyenne. Les détails des scores utilisés dans ces graphiques se trouvent à la fin du Rapport.
+:::
+
+```{r generate-sections, results='asis', echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=8, out.width="100%"}
+#| fig-width: 12
+#| fig-height: 8
+#| out-width: "100%"
+#| fig-dpi: 300
+
+# Loop through each PRS score and create a section for it
+for (pgs_id in patient_pgs_scores) {
+  # Get metadata for this PGS
+  metadata <- get_pgs_metadata(pgs_id)
+  
+  # Create section header with metadata
+  if (!is.null(metadata) && metadata$header$pgs_name != "") {
+    trait_name <- metadata$header$pgs_name
+    # Get the actual trait name for display
+    display_trait <- if (!is.null(metadata$header$trait_reported) && metadata$header$trait_reported != "") {
+      metadata$header$trait_reported
+    } else if (!is.null(metadata$header$trait_mapped) && length(metadata$header$trait_mapped) > 0) {
+      metadata$header$trait_mapped[[1]]
+    } else {
+      trait_name  # fallback to trait name
+    }
+
+    # Only extract PGSID prefix, e.g. go from PGS000001_hmPOS_GRCh38 to PGS000001
+    pgs_id_section_label <- stringr::str_replace(pgs_id, "^(PGS[0-9]+).*", "\\1")
+    cat("\n\n## Analyse du score PRS:", pgs_id_section_label, "pour", display_trait, "\n\n")
+    # cat("**Identifiant PGS:**", stringr::str_replace(pgs_id, "^(PGS[0-9]+).*", "\\1"), "\n\n")
+  } else {
+    cat("\n\n## Analyse du score PRS:", stringr::str_replace(pgs_id, "^(PGS[0-9]+).*", "\\1"), "pour", params$patient_id, "\n\n")
+  }
+  
+  # Bell curve risk visualization
+  # cat("\n\n### Évaluation du risque génétique pour", display_trait, "\n\n")
+
+  # Get patient data for this PGS and compute the percentile
+  patient_data <- scores_popsim %>% filter(IID == full_patient_id, PGS == pgs_id)
+  patient_percentile <- round(patient_data$Overall_Percentile)
+  
+  # Determine risk level description
+  risk_level <- if (patient_percentile <= 20) {
+    "plus faible que"
+  } else if (patient_percentile >= 80) {
+    "plus élevé que"
+  } else {
+    "similaire à"
+  }
+
+  # Get metadata for trait information
+  metadata <- get_pgs_metadata(pgs_id)
+  
+  # Determine trait name - use the same logic as in section header
+  if (!is.null(metadata) && metadata$header$pgs_name != "") {
+    trait_name <- metadata$header$pgs_name
+  } else {
+    # Check if it's a custom score
+    if (stringr::str_detect(pgs_id, "_")) {
+      trait_name <- stringr::str_replace(pgs_id, ".*_(.+)", "\\1")
+    } else {
+      trait_name <- NULL
+    }
+  }
+  
+  if (!is.null(trait_name)) {
+    cat("Votre risque polygénique de développer <strong>", display_trait, "</strong> est ", risk_level, " celui de la population générale.\n\n")
+  } else {
+    cat("Votre risque polygénique est ", risk_level, " celui de la population générale.\n\n")
+    cat("<em>Score personnalisé - veuillez contacter la source pour l'évaluation du trait PRS.</em>\n\n")
+  }
+  
+  # Generate the summary text
+  # cat("**Résumé des résultats :**\n\n")
+
+  cat("Votre score se situe au <strong>", patient_percentile, "e percentile</strong>. Cela signifie que, comparativement à vous, ", patient_percentile, "% de la population a un risque inférieur ou égal de développer cette condition, tandis que ", 100 - patient_percentile, "% de la population a un risque supérieur. Ceci ne correspond <u>ne</u> <u>pas</u> à un risque de ", patient_percentile, "% de développer cette condition. Voici une représentation visuelle de votre risque :\n\n")
+  
+  # Create and print bell curve visualizations
+  # bell_curve_plot <- create_bell_curve_risk_viz(params$patient_id, pgs_id)
+  # print(bell_curve_plot)
+  
+  # Add purple gradient version as comparison
+  # cat("\n\n<strong>Alternative Gradient</strong>\n\n")
+  bell_curve_purple <- create_bell_curve_purple_viz(params$patient_id, pgs_id)
+  print(bell_curve_purple)
+
+  # add spacing
+  cat("\n\n")
+
+  # Add risk direction text with arrow 
+  cat('<div style="text-align: center; font-size: 24px; margin-top: -20px; margin-bottom: 20px;"><strong>Risque plus faible ←———→ Risque plus élevé</strong></div>\n\n')
+  
+  # continue explanation text
+  cat("\n\n")
+   
+}
+``` 
+
+## Résumé de tous les scores PRS pour le patient <strong>`r params$patient_id`</strong>
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+#| label: table-summary-prs
+
+# Display summary of all PRS scores for this patient
+patient_summary_table <- scores_popsim %>%
+  filter(IID == full_patient_id) %>%
+  select(PGS, Z_MostSimilarPop, Overall_Percentile) %>%
+  distinct() %>%  # remove any duplicate rows
+  mutate(.is_custom = !grepl('^PGS[0-9]+', PGS, ignore.case = TRUE)) %>%
+  arrange(.is_custom, PGS) %>%
+  select(-.is_custom) %>%
+  rename(
+    "PGS ID" = PGS,
+    "Score" = Z_MostSimilarPop,
+    "Overall Percentile" = Overall_Percentile
+  )
+
+# For HTML output, use kable
+knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c")
+```
+
+**Informations supplémentaires sur les scores de risque polygénique:** <br />
+
+Cette analyse a été ajustée avec le Z-score de la population la plus similaire (Z_MostSimilarPop) en utilisant [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) version 2.0.1 [^1].
 
 ```{r, echo=FALSE, warning=FALSE}
 # If metadata is available, display a compact table like the Catalog report, but
 # restricted to the scores used for this patient
 if (!is.null(pgs_metadata)) {
-  patient_base_ids <- unique(stringr::str_replace(patient_pgs_list, "^(PGS[0-9]+).*", "\\1"))
+  # Keep only true PGS accessions (e.g., PGS005168) used by this patient
+  patient_base_ids <- unique(stringr::str_extract(patient_pgs_list, "^(PGS[0-9]+)"))
+  patient_base_ids <- patient_base_ids[!is.na(patient_base_ids) & patient_base_ids != ""]
   json_list <- pgs_metadata
   # helper extractors
   extract_chr_handle_null <- function(x, field) {
@@ -381,7 +665,7 @@ if (!is.null(pgs_metadata)) {
       stringr::str_glue("<u>Reported trait:</u> {.x} <br /> <u>Mapped trait(s):</u> {.y}")
     })
   }
-  # filter json entries to those used in this patient
+  # filter json entries to those used in this patient (Catalog-only)
   json_list_patient <- purrr::keep(json_list, ~ .x$pgs_id %in% patient_base_ids)
   if (length(json_list_patient) > 0) {
   # Create metadata table for Catalog scores
@@ -424,148 +708,29 @@ if (!is.null(pgs_metadata)) {
       knitr::kable(scorefile_metadata, format = "html", escape = FALSE)
     }
   }
-} else {
-  cat("**Note:** Certains scores proviennent de fichiers de score personnalisés. Pour plus d'informations, veuillez consulter la source de ces fichiers.")
 }
+
 ```
 
-Ce score a été ajusté avec le Z-score de la population la plus similaire (Z_MostSimilarPop) en utilisant [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) version 2.0.1 [^1].
-:::
-
-::: {.callout-tip}
-## Qu'est-ce qu'un score de risque polygénique?
-
-Un score de risque polygénique est une estimation de votre risque génétique de développer une condition. Ce score est calculé à partir de nombreux petits changements dans votre matériel génétique (appelés variants génétiques), qui sont fréquents dans la population. Chacun de ces variants a un petit effet sur votre risque, mais tous ces effets peuvent être additionnés pour obtenir un score global, ce qui représente votre score de risque polygénique. Ce score n'est pas un diagnostic, et il ne peut pas prédire si vous développerez la condition. Il s'agit d'une estimation de votre risque comparativement au reste de la population.
-
-
-::: {.callout-tip}
-## Ce que ce résultat signifie pour vous
-*À compléter selon les besoins cliniques*; 
-
-***V.0.1, idea:***: Pour chaque score polygénique évalué, le profil génétique du patient est analysé en comparaison avec un groupe de référence génétiquement diversifié. Le percentile de risque final est déterminé en alignant le score individuel avec la population de référence présentant l'ascendance génétique la plus proche. Il est donc essentiel de se référer aux spécifications détaillées disponibles dans le Polygenic Score Catalog pour chaque score. La pertinence des estimations de risque pour d'autres populations est directement liée à leur ressemblance avec les cohortes initiales ayant servi à l'élaboration du modèle.
-:::
-
-::: {.callout-warning}
-## Limites des scores de risque polygéniques
-Les scores de risque polygénique ne prennent pas en compte tous les facteurs influençant le risque de développer une condition, comme par exemple des variants génétiques rares, l'âge, les antécédents médicaux, les habitudes de vie ou l'environnement. Ils servent d'indicateurs prédictifs et ne constituent pas un outil diagnostique. Ces scores comportent une marge d'incertitude significative; ainsi, un individu avec un score élevé peut ne jamais développer la condition, tandis qu'un individu avec un score faible peut développer la condition. 
-De plus, les scores de risque polygénique sont principalement basés sur des données génomiques d'individus d'origine européenne. Pour mieux tenir compte des différences génétiques entre différentes populations, nous avons appliqué une méthode d'ajustement basée sur l'ascendance (PMID: 39327485). Cette correction améliore la généralisation des scores chez des individus de différentes origines, mais elle ne permet pas d'éliminer totalement le biais de généralisation. Les scores de risque polygéniques peuvent donc être moins fiables chez les personnes issues de populations non européennes.
-:::
-
-::: {.callout-warning}
-## À des fins de recherche uniquement
-
-Une validation par un laboratoire spécialisé en génétique et l'approbation du médecin traitant sont nécessaires avant toute décision médicale ou autre basée sur ces résultats. Ces analyses constituent des données de recherche préliminaires.
-:::
-
-[^1]: Lambert, S.A., Wingfield, B. et al. (2024) Enhancing the Polygenic Score Catalog with tools for score calculation and ancestry normalization. *Nature Genetics*. doi:10.1038/s41588-024-01937-x.
 
 ```{r}
 #| echo: false
 #| warning: false
 #| message: false
+#| results: asis
 
-# Display summary of all PRS scores for this patient
-patient_summary_table <- scores_popsim %>%
-  filter(IID == full_patient_id) %>%
-  select(PGS, Z_MostSimilarPop, Overall_Percentile) %>%
-  distinct() %>%  # remove any duplicate rows
-  rename(
-    "Score Type" = PGS,
-    "Score" = Z_MostSimilarPop,
-    "Overall Percentile" = Overall_Percentile
+# Build mini-table for custom scores (those without a PGS accession)
+custom_scores <- patient_pgs_list[!pgs_mask]
+custom_scores <- custom_scores[!is.na(custom_scores) & custom_scores != ""]
+if (length(custom_scores) > 0) {
+  custom_tbl <- tibble::tibble(
+    Score = custom_scores,
+    Note = "Score personnalisé – consulter la source"
   )
-
-# For HTML output, use kable
-knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c", 
-             caption = paste("Résumé de tous les scores PRS pour le patient", params$patient_id))
-```
-
-```{r generate-sections, results='asis', echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=8, out.width="100%"}
-#| fig-width: 12
-#| fig-height: 8
-#| out-width: "100%"
-#| fig-dpi: 300
-
-# Loop through each PRS score and create a section for it
-for (pgs_id in patient_pgs_scores) {
-  # Get metadata for this PGS
-  metadata <- get_pgs_metadata(pgs_id)
-  
-  # Create section header with metadata
-  if (!is.null(metadata) && metadata$header$pgs_name != "") {
-    trait_name <- metadata$header$pgs_name
-    # Get the actual trait name for display
-    display_trait <- if (!is.null(metadata$header$trait_reported) && metadata$header$trait_reported != "") {
-      metadata$header$trait_reported
-    } else if (!is.null(metadata$header$trait_mapped) && length(metadata$header$trait_mapped) > 0) {
-      metadata$header$trait_mapped[[1]]
-    } else {
-      trait_name  # fallback to PGS name
-    }
-    cat("\n\n## Analyse du score PRS:", trait_name, "pour", display_trait, "\n\n")
-    cat("**Identifiant PGS:**", stringr::str_replace(pgs_id, "^(PGS[0-9]+).*", "\\1"), "\n\n")
-  } else {
-    cat("\n\n## Analyse du score PRS:", stringr::str_replace(pgs_id, "^(PGS[0-9]+).*", "\\1"), "pour", params$patient_id, "\n\n")
-  }
-  
-  # Bell curve risk visualization
-  cat("\n\n### Évaluation du risque génétique pour", pgs_id, "\n\n")
-
-  # Get patient data for this PGS and compute the percentile
-  patient_data <- scores_popsim %>% filter(IID == full_patient_id, PGS == pgs_id)
-  patient_percentile <- round(patient_data$Overall_Percentile)
-  
-  # Determine risk level description
-  risk_level <- if (patient_percentile <= 20) {
-    "plus faible que"
-  } else if (patient_percentile >= 80) {
-    "plus élevé que"
-  } else {
-    "similaire à"
-  }
-
-  # Get metadata for trait information
-  metadata <- get_pgs_metadata(pgs_id)
-  
-  # Determine trait name - use the same logic as in section header
-  if (!is.null(metadata) && metadata$header$pgs_name != "") {
-    trait_name <- metadata$header$pgs_name
-  } else {
-    # Check if it's a custom score
-    if (stringr::str_detect(pgs_id, "_")) {
-      trait_name <- stringr::str_replace(pgs_id, ".*_(.+)", "\\1")
-    } else {
-      trait_name <- NULL
-    }
-  }
-  
-  if (!is.null(trait_name)) {
-    cat("Votre risque polygénique de développer la <strong>", trait_name, "</strong> est ", risk_level, " celui de la population générale.\n\n")
-  } else {
-    cat("Votre risque polygénique est ", risk_level, " celui de la population générale.\n\n")
-    cat("<em>Score personnalisé - veuillez contacter la source pour l'évaluation du trait PRS.</em>\n\n")
-  }
-  
-  # Generate the summary text
-  # cat("**Résumé des résultats :**\n\n")
-
-  cat("Votre score se situe au <strong>", patient_percentile, "e percentile</strong>. Ceci ne correspond pas à un risque de ", patient_percentile, "% de développer cette condition. Cela signifie que, comparativement à vous, ", patient_percentile, "% de la population a un risque inférieur ou égal de développer cette condition, tandis que ", 100 - patient_percentile, "% de la population a un risque supérieur. Voici une représentation visuelle de votre risque :\n\n")
-  
-  # Create and print bell curve visualization
-  bell_curve_plot <- create_bell_curve_risk_viz(params$patient_id, pgs_id)
-  print(bell_curve_plot)
-
-  # add spacing
-  cat("\n\n")
-
-  # Add risk direction text with arrow 
-  cat('<div style="text-align: center; font-size: 24px; margin-top: -20px; margin-bottom: 20px;"><strong>Risque plus faible ←———→ Risque plus élevé</strong></div>\n\n')
-  
-  # continue explanation text
-  cat("\n\n")
-  
-  cat("Ce graphique montre où se situe votre score de risque polygénique par rapport à la population générale (ligne verticale). La plupart des personnes ont un score situé vers le centre de la courbe, ce qui correspond à un risque génétique moyen. Moins de personnes se trouvent aux extrémités. Un score plus à gauche indique un risque plus faible que la moyenne. Un score au centre indique un risque moyen. Un score plus à droite indique un risque plus élevé que la moyenne.\n\n")
- 
 }
-``` 
 
+if (exists("custom_tbl") && nrow(custom_tbl) > 0) {
+  cat("\n\n### Scores personnalisés\n\n")
+  knitr::kable(custom_tbl, format = "html", escape = FALSE)
+}
+```

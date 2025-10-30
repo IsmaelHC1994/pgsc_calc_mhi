@@ -6,7 +6,7 @@ suppressPackageStartupMessages({
 })
 
 # ------------------------------------------------------------------
-# Args: --subset_scores=PGS_A,PGS_B --suffix=subset --outdir=reports
+# Args: --subset_scores=PGS_A,PGS_B --suffix=subset --outdir=reports --template=working_patient_report_template.qmd
 # ------------------------------------------------------------------
 args <- commandArgs(trailingOnly = TRUE)
 get_arg <- function(key, default = "") {
@@ -18,7 +18,7 @@ get_arg <- function(key, default = "") {
 subset_scores_arg <- get_arg('subset_scores', '')
 suffix <- get_arg('suffix', '')
 outdir <- get_arg('outdir', '.')
-template_file <- get_arg('template', 'patient_report_template.qmd')
+template_file <- get_arg('template', 'working_patient_report_template.qmd')
 
 dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
 
@@ -69,10 +69,6 @@ if (!file.exists(template_file)) {
 for (pid in all_patient_ids) {
   message(sprintf('Generating reports for patient %s...', pid))
   outfile <- paste0('patient_', pid, if (nzchar(suffix)) paste0('_', suffix) else '', '_report.html')
-  quarto::quarto_render(
-    input = template_file,
-    output_format = 'html',
-    output_file = file.path(outdir, outfile),
-    execute_params = list(patient_id = pid)
-  )
+  quarto::quarto_render('patient_report_template_roma.qmd', output_file = paste0('patient_', pid, '_debug.html'), 
+  execute_params = list(patient_id = pid))
 }

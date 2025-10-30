@@ -28,6 +28,7 @@ library(tidyverse)
 library(patchwork)
 library(ggpubr)
 library(viridis)
+library(khroma)     # For Crameri color schemes (roma palette)
 library(showtext)
 library(knitr)
 # if (!requireNamespace("pak", quietly = TRUE)) {
@@ -187,15 +188,18 @@ t_high <- qnorm(0.80)
 patient_x <- qnorm(patient_percentile/100)
 patient_line_color <- "#8B5CF6"  # violet
 
+# Create roma color palette
+roma <- color("roma")
+
+# Map x values to roma colors (x ranges from -4 to 4, map to 0-1 for palette)
+df_bell$color_value <- (df_bell$x + 4) / 8  # normalize to 0-1
+
 ggplot(df_bell, aes(x = x, y = y)) +
   # Create smooth gradient using many small segments
-  geom_segment(aes(x = x, xend = x, y = 0, yend = y, color = x), 
+  geom_segment(aes(x = x, xend = x, y = 0, yend = y, color = color_value), 
                size = 2.5, alpha = 0.9) +
-  scale_color_gradient2(
-    low = "#87CEEB",      # sky blue - more pronounced
-    mid = "#F0E68C",      # khaki - more pronounced
-    high = "#FFB6C1",     # light pink - more pronounced
-    midpoint = 0,         # center the gradient at x=0
+  scale_color_gradientn(
+    colours = roma(seq(0, 1, length = 100)),
     guide = "none"
   ) +
   # Bell curve outline
@@ -208,10 +212,10 @@ ggplot(df_bell, aes(x = x, y = y)) +
            y = 0, yend = max_y, color = patient_line_color, linewidth = 2.5) +
   annotate("text", x = patient_x + 0.05, y = max_y * 0.92, label = patient_id,
            color = "black", size = 6, hjust = 0, vjust = 0.5) +
-  # Human icons near x-axis
+  # Human icons near x-axis - using purple gradient colors
   annotate("text", x = -2.5, y = max_y * 0.25, label = if(use_fontawesome) "\uf007" else "●",
            family = if(use_fontawesome) "FontAwesome" else "sans",
-           size = 10, color = "#87CEEB") +  # sky blue - same as gradient
+           size = 10, color = roma(0)) +  # light color from roma
   annotate("text", x = -0.5, y = max_y * 0.25, label = if(use_fontawesome) "\uf007" else "●",
            family = if(use_fontawesome) "FontAwesome" else "sans",
            size = 9, color = "gray50") +
@@ -223,7 +227,7 @@ ggplot(df_bell, aes(x = x, y = y)) +
            size = 9, color = "gray50") +
   annotate("text", x = 2.5, y = max_y * 0.25, label = if(use_fontawesome) "\uf007" else "●",
            family = if(use_fontawesome) "FontAwesome" else "sans",
-           size = 10, color = "#FFB6C1") +  # light pink - same as gradient
+           size = 10, color = roma(1)) +  # dark color from roma
   # Risk labels (single line to avoid odd breaks)
   annotate("text", x = -2.75, y = max_y * 0.55,
            label = "Fewer individuals have decreased risk",
@@ -256,6 +260,88 @@ ggplot(df_bell, aes(x = x, y = y)) +
   labs(
     title = paste("Polygenic Risk Score:", test_pgs_id),
     subtitle = "Normal Distribution with Risk Zones"
+  )
+```
+
+### Step 4b: Purple-Red Gradient (Updated)
+```{r bell-purple-gradient, echo=FALSE, fig.width=16, fig.height=4}
+#| label: bell-purple-gradient
+
+# Build bell curve with updated purple-to-red gradient
+x_vals_purple <- seq(-4, 4, length.out = 2001)
+y_vals_purple <- dnorm(x_vals_purple)
+df_bell_purple <- tibble(x = x_vals_purple, y = y_vals_purple)
+max_y_purple <- max(df_bell_purple$y)
+
+ggplot(df_bell_purple, aes(x = x, y = y)) +
+  # Create smooth gradient with updated purple-to-red colors
+  geom_segment(aes(x = x, xend = x, y = 0, yend = y, color = x), 
+               size = 2.5, alpha = 0.9) +
+  scale_color_gradient2(
+    low = "#E8F4F8",      # very light blue-lavender - low risk
+    mid = "#E4B7F0",      # medium purple - intermediate risk  
+    high = "#9C0300",     # dark red - high risk
+    midpoint = 0,         # center the gradient at x=0
+    guide = "none"
+  ) +
+  # Bell curve outline
+  geom_line(color = "gray70", linewidth = 3, alpha = 0.9) +
+  # Visual thresholds
+  geom_vline(xintercept = c(t_low, t_high), linetype = "dashed",
+             linewidth = 1.2, color = c("#5DADE2", "#E57373"), alpha = 0.6) +
+  # Patient line
+  annotate("segment", x = patient_x, xend = patient_x,
+           y = 0, yend = max_y_purple, color = patient_line_color, linewidth = 2.5) +
+  annotate("text", x = patient_x + 0.05, y = max_y_purple * 0.92, label = patient_id,
+           color = "black", size = 6, hjust = 0, vjust = 0.5) +
+  # Human icons near x-axis with purple gradient colors
+  annotate("text", x = -2.5, y = max_y_purple * 0.25, label = if(use_fontawesome) "\uf007" else "●",
+           family = if(use_fontawesome) "FontAwesome" else "sans",
+           size = 10, color = "#E8F4F8") +  # light blue-lavender
+  annotate("text", x = -0.5, y = max_y_purple * 0.25, label = if(use_fontawesome) "\uf007" else "●",
+           family = if(use_fontawesome) "FontAwesome" else "sans",
+           size = 9, color = "gray50") +
+  annotate("text", x = 0, y = max_y_purple * 0.25, label = if(use_fontawesome) "\uf007" else "●",
+           family = if(use_fontawesome) "FontAwesome" else "sans",
+           size = 9, color = "gray50") +
+  annotate("text", x = 0.5, y = max_y_purple * 0.25, label = if(use_fontawesome) "\uf007" else "●",
+           family = if(use_fontawesome) "FontAwesome" else "sans",
+           size = 9, color = "gray50") +
+  annotate("text", x = 2.5, y = max_y_purple * 0.25, label = if(use_fontawesome) "\uf007" else "●",
+           family = if(use_fontawesome) "FontAwesome" else "sans",
+           size = 10, color = "#9C0300") +  # dark red
+  # Risk labels
+  annotate("text", x = -2.75, y = max_y_purple * 0.55,
+           label = "Fewer individuals have decreased risk",
+           size = 6, color = "#4575b4") +
+  annotate("text", x = 0, y = max_y_purple * 0.55,
+           label = "Most individuals have average risk",
+           size = 6, color = "gray30") +
+  annotate("text", x = 2.75, y = max_y_purple * 0.55,
+           label = "Fewer individuals have increased risk",
+           size = 6, color = "#d73027") +
+  # Scales and theme
+  scale_y_continuous(limits = c(0, max_y_purple), expand = expansion(mult = c(0, 0))) +
+  scale_x_continuous(
+    limits = c(-4, 4),
+    breaks = qnorm(c(0, 0.05, 0.20, 0.50, 0.80, 0.95, 0.99)),
+    labels = c("0", "5th", "20th", "50th", "80th", "95th", "99th")
+  ) +
+  theme_pubr(base_size = 22) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 18, hjust = 0.5)
+  ) +
+  labs(
+    title = paste("Polygenic Risk Score:", test_pgs_id),
+    subtitle = "Normal Distribution with Purple-Red Gradient"
   )
 ```
 
