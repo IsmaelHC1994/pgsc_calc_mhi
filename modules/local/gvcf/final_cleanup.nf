@@ -2,7 +2,7 @@ process FINAL_CLEANUP {
     label 'process_medium'
     container = 'docker.io/ismaelhc94/pgsc-mhi-report:dev'
     tag "${merged_vcf.baseName}"
-    publishDir "${params.outdir}/${params.sampleset}/gvcf/final", mode: 'copy', overwrite: true
+    // publishDir "${params.outdir}/${params.sampleset}/gvcf/final", mode: 'copy', overwrite: true
     
     input:
     path merged_vcf

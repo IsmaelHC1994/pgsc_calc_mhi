@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # Configuration
-INPUT_DIR="${INPUT_DIR:-/home/ihc/tmp/ica_results}"
+INPUT_DIR="${INPUT_DIR:-/home/ihc/tmp/hiro_pgsc_bak/ica_results}"
 OUTPUT_DIR="${OUTPUT_DIR:-/home/ihc/codebase/dev/regenerated_reports}"
 TEMPLATE_FILE="${TEMPLATE_FILE:-/home/ihc/codebase/dev/patient_report_template.qmd}"
 # TEMPLATE_FILE="${TEMPLATE_FILE:-/home/ihc/codebase/dev/patient_report_template_mhi_prs_debug.qmd}"

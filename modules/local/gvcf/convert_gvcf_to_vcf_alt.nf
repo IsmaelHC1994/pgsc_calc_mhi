@@ -3,7 +3,7 @@ process CONVERT_GVCF_TO_VCF {
     container = 'docker.io/ismaelhc94/pgsc-mhi-report:dev'
     tag "${gvcf_file.baseName}"
     
-    publishDir "${params.outdir}/${params.sampleset}/gvcf/converted", mode: 'copy', overwrite: true
+    // publishDir "${params.outdir}/${params.sampleset}/gvcf/converted", mode: 'copy', overwrite: true
 
     input:
     tuple path(gvcf_file), path(reference_genome), path(reference_vcf), path(reference_vcf_index)

@@ -2,7 +2,7 @@ process MERGE_WITH_REFERENCE {
     label 'process_high'
     container = 'docker.io/ismaelhc94/pgsc-mhi-report:dev'
     tag "${processed_vcf.baseName}"
-    publishDir "${params.outdir}/${params.sampleset}/gvcf/merged", mode: 'copy', overwrite: true
+    // publishDir "${params.outdir}/${params.sampleset}/gvcf/merged", mode: 'copy', overwrite: true
     
     input:
     path processed_vcf
