@@ -62,17 +62,33 @@ scores_popsim <- scores %>%
   left_join(popsim %>% select(IID, MostSimilarPop), by = "IID") %>%
   mutate(simple_id = str_extract(IID, "[^_]+$"))
 
+# Identify the full IID for the target sample
+target_iid <- scores_popsim %>%
+  filter(simple_id == sample_id, sampleset != "reference") %>%
+  pull(IID) %>%
+  first()
+
+if (is.na(target_iid)) {
+  stop("Target sample ID '", sample_id, "' not found in non-reference samples")
+}
+
+# Filter to reference samples + ONLY the specific target sample
+# This ensures percentiles are calculated using only reference + this one target sample
+percentile_data <- scores_popsim %>%
+  filter(sampleset == "reference" | IID == target_iid)
+
 # Calculate percentiles for each PGS score separately
-scores_popsim <- scores_popsim %>%
+# Using only reference + the specific target sample
+percentile_data <- percentile_data %>%
   group_by(PGS) %>%
   mutate(Overall_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
   group_by(PGS, MostSimilarPop) %>%
   mutate(Population_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
   ungroup()
 
-# Filter to the specific sample (non-reference)
-sample_data <- scores_popsim %>%
-  filter(simple_id == sample_id, sampleset != "reference") %>%
+# Extract only the target sample's data with calculated percentiles
+sample_data <- percentile_data %>%
+  filter(IID == target_iid) %>%
   select(IID, PGS, Z_MostSimilarPop, Overall_Percentile, Population_Percentile) %>%
   rename(percentile_MostSimilarPop = Population_Percentile) %>%
   mutate(sample_id = sample_id, .before = 1) %>%

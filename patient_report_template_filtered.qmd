@@ -110,21 +110,7 @@ scores_popsim <- scores %>%
   # Create a simple ID column using the last part after underscore
   mutate(simple_id = str_extract(IID, "[^_]+$"))
 
-# Calculate percentiles for each PRS score separately
-scores_popsim <- scores_popsim %>%
-  group_by(PGS) %>%
-  mutate(Overall_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
-  group_by(PGS, MostSimilarPop) %>%
-  mutate(Population_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
-  ungroup()
-
-run_patient_data <- scores_popsim %>%
-  filter(sampleset != "reference")
-
-# Get reference data
-reference_data <- scores_popsim %>% filter(sampleset == "reference")
-
-# Look up full IID from simple ID
+# Look up full IID from simple ID FIRST
 full_patient_id <- scores_popsim %>%
   filter(simple_id == params$patient_id) %>%
   pull(IID) %>%
@@ -133,6 +119,42 @@ full_patient_id <- scores_popsim %>%
 if (is.na(full_patient_id)) {
   stop("Patient ID not found")
 }
+
+# Filter to reference samples + ONLY the specific target patient
+# This ensures percentiles are calculated using only reference + this one patient
+percentile_data <- scores_popsim %>%
+  filter(sampleset == "reference" | IID == full_patient_id)
+
+# Calculate percentiles for each PRS score separately
+# Using only reference + the specific target patient
+percentile_data <- percentile_data %>%
+  group_by(PGS) %>%
+  mutate(Overall_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
+  group_by(PGS, MostSimilarPop) %>%
+  mutate(Population_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
+  ungroup()
+
+# Update scores_popsim with correct percentiles for the patient
+# Percentiles are calculated using only reference + this specific patient
+patient_percentiles <- percentile_data %>%
+  filter(IID == full_patient_id) %>%
+  select(IID, PGS, Overall_Percentile, Population_Percentile)
+
+# Merge patient percentiles back into scores_popsim
+# This ensures patient rows have correct percentiles calculated using only reference + this patient
+scores_popsim <- scores_popsim %>%
+  left_join(patient_percentiles, by = c("IID", "PGS"), suffix = c("", "_correct")) %>%
+  mutate(
+    Overall_Percentile = ifelse(!is.na(Overall_Percentile_correct), Overall_Percentile_correct, Overall_Percentile),
+    Population_Percentile = ifelse(!is.na(Population_Percentile_correct), Population_Percentile_correct, Population_Percentile)
+  ) %>%
+  select(-Overall_Percentile_correct, -Population_Percentile_correct)
+
+run_patient_data <- scores_popsim %>%
+  filter(sampleset != "reference")
+
+# Get reference data
+reference_data <- scores_popsim %>% filter(sampleset == "reference")
 
 # Get list of PRS scores for this patient
 patient_pgs_list <- scores_popsim %>%
