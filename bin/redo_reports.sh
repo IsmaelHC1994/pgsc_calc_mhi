@@ -18,6 +18,11 @@ INDICATION_CSV="${INDICATION_CSV:-/home/ihc/codebase/dev/corr_55samples_formatte
 
 # For testing: process only the first sample if TEST_ONE is set
 # Pass as: TEST_ONE=true ./redo_reports.sh
+# Example (dev ica_results, one sample):
+#   INPUT_DIR=/path/to/dev/ica_results OUTPUT_DIR=/path/to/dev/regenerated_reports \
+#   TEMPLATE_FILE=/path/to/dev/patient_report_template_filtered.qmd \
+#   INDICATION_CSV=/path/to/dev/corr_55samples_formatted.txt \
+#   TEST_ONE=true ./redo_reports.sh
 TEST_ONE="${TEST_ONE:-false}"
 
 # Function to map indication to PGS IDs
@@ -89,6 +94,36 @@ get_indication_for_sample() {
     ' "$csv_file" | head -1
 }
 
+# Function to get Dossier for a sample ID (#LDM) from CSV
+# Returns Dossier (column 1) or empty string if not found
+get_dossier_for_sample() {
+    local sample_id="$1"
+    local csv_file="$2"
+    if [ ! -f "$csv_file" ]; then
+        echo ""
+        return
+    fi
+    awk -F',' -v sample="$sample_id" '
+        NR == 1 {
+            for (i=1; i<=NF; i++) {
+                gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", $i)
+                if ($i == "#LDM") ldm_col = i
+                if ($i == "Dossier") dossier_col = i
+            }
+            next
+        }
+        {
+            ldm_val = $ldm_col
+            gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", ldm_val)
+            if (ldm_val == sample) {
+                d = $dossier_col
+                gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", d)
+                print d
+                exit
+            }
+        }
+    ' "$csv_file" | head -1
+}
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -174,7 +209,14 @@ for run_dir in "$INPUT_DIR"/runWGS*; do
         else
             echo "    Filtering to PGS IDs: $allowed_pgs_ids"
         fi
-        
+
+        # Identifiers for report header/footer (Identifier1 = Dossier or run, Identifier2 = sample #LDM)
+        identifier1=$(get_dossier_for_sample "$sample_id" "$INDICATION_CSV")
+        if [ -z "$identifier1" ]; then
+            identifier1="$run_name"
+        fi
+        identifier2="$sample_id"
+
         # Create temporary work directory for this sample
         work_dir=$(mktemp -d)
         trap "rm -rf $work_dir" RETURN
@@ -231,6 +273,8 @@ for run_dir in "$INPUT_DIR"/runWGS*; do
         cat > "$work_dir/params.yml" << EOF
 patient_id: "$sample_id"
 allowed_pgs_ids: "$allowed_pgs_ids"
+identifier1: "$identifier1"
+identifier2: "$identifier2"
 EOF
         
         # Generate the report

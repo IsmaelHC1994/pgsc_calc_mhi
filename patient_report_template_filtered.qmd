@@ -13,6 +13,39 @@ format:
     fig-dpi: 300
     fig-format: "png"  # Added to ensure consistent rendering
     fig-retina: 2  # Added for better resolution
+    include-in-header:
+      text: |
+        <style>
+        .report-identifiers-footer {
+          position: fixed;
+          bottom: 0;
+          right: 0;
+          padding: 8px 16px;
+          font-size: 0.85rem;
+          color: #555;
+          background: #f8f9fa;
+          border-top: 1px solid #dee2e6;
+          border-left: 1px solid #dee2e6;
+          z-index: 999;
+        }
+        .report-identifiers-footer span { margin-left: 12px; }
+        </style>
+    include-after-body:
+      text: |
+        <div class="report-identifiers-footer" role="contentinfo">
+          <span id="footer-identifier1">Identifier1</span>
+          <span id="footer-identifier2">Identifier2</span>
+        </div>
+        <script>
+        (function() {
+          var p1 = document.querySelector('[data-identifier1-placeholder]');
+          var p2 = document.querySelector('[data-identifier2-placeholder]');
+          var f1 = document.getElementById('footer-identifier1');
+          var f2 = document.getElementById('footer-identifier2');
+          if (p1 && f1) f1.textContent = p1.textContent.trim();
+          if (p2 && f2) f2.textContent = p2.textContent.trim();
+        })();
+        </script>
 
 execute:
   cache: false
@@ -20,6 +53,8 @@ execute:
 params:
   patient_id: "default"
   allowed_pgs_ids: "all"  # Comma-separated list of PGS IDs to include, or "all" for all scores
+  identifier1: "Identifier1"   # Placeholder: e.g. dossier or run ID
+  identifier2: "Identifier2"   # Placeholder: e.g. sample or LDM
 ---
 
 ```{r setup, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
@@ -138,16 +173,27 @@ percentile_data <- percentile_data %>%
 # Percentiles are calculated using only reference + this specific patient
 patient_percentiles <- percentile_data %>%
   filter(IID == full_patient_id) %>%
-  select(IID, PGS, Overall_Percentile, Population_Percentile)
+  select(IID, PGS, Overall_Percentile, Population_Percentile) %>%
+  rename(Overall_Percentile_correct = Overall_Percentile, Population_Percentile_correct = Population_Percentile)
 
-# Merge patient percentiles back into scores_popsim
-# This ensures patient rows have correct percentiles calculated using only reference + this patient
+# Merge patient percentiles back into scores_popsim (rename before join so _correct columns always exist)
 scores_popsim <- scores_popsim %>%
-  left_join(patient_percentiles, by = c("IID", "PGS"), suffix = c("", "_correct")) %>%
-  mutate(
-    Overall_Percentile = ifelse(!is.na(Overall_Percentile_correct), Overall_Percentile_correct, Overall_Percentile),
-    Population_Percentile = ifelse(!is.na(Population_Percentile_correct), Population_Percentile_correct, Population_Percentile)
-  ) %>%
+  left_join(patient_percentiles, by = c("IID", "PGS"))
+# Use corrected percentiles when present, else keep existing (pipeline may or may not provide percentiles)
+if ("Overall_Percentile" %in% names(scores_popsim)) {
+  scores_popsim <- scores_popsim %>%
+    mutate(
+      Overall_Percentile = coalesce(Overall_Percentile_correct, Overall_Percentile),
+      Population_Percentile = coalesce(Population_Percentile_correct, Population_Percentile)
+    )
+} else {
+  scores_popsim <- scores_popsim %>%
+    mutate(
+      Overall_Percentile = Overall_Percentile_correct,
+      Population_Percentile = Population_Percentile_correct
+    )
+}
+scores_popsim <- scores_popsim %>%
   select(-Overall_Percentile_correct, -Population_Percentile_correct)
 
 run_patient_data <- scores_popsim %>%
@@ -240,6 +286,10 @@ get_french_label <- function(pgs_id) {
   # Use the same mapping as traits
   return(get_french_trait(pgs_id))
 }
+
+# Build indication/conditions label from the PGS shown (for preamble "Maladie/s ciblée/s")
+traits_shown <- unique(na.omit(unlist(sapply(patient_pgs_scores, get_french_trait))))
+indication_display <- if (length(traits_shown) > 0) paste(traits_shown, collapse = ", ") else "Tous les scores"
 
 # Function to get PGS metadata
 get_pgs_metadata <- function(pgs_id) {
@@ -407,24 +457,34 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
 
 
 <!-- # Analyse du risque polygénique  -->
-**Date d'émission :** `r report_date`
+<!-- **Date d'émission :** `r report_date` -->
+
+**Identifier1:** <span data-identifier1-placeholder>`r params$identifier1`</span> · **Identifier2:** <span data-identifier2-placeholder>`r params$identifier2`</span>
 
 ::: {.callout-note}
-## Ce rapport contient l'analyse des scores de risque polygénique (PGS) pour le patient **`r params$patient_id`**.   
+<!-- ## Ce rapport contient l'analyse des scores de risque polygénique (PGS) pour le patient **`r params$patient_id`**.    -->
+
+## Maladie/s ciblée/s : <strong>`r indication_display`</strong>
+
+Ce rapport affiche uniquement les scores PGS pertinents pour ces conditions (filtrage par indication).
 
 :::
 
 ::: {.callout-tip}
-## Qu'est-ce qu'un score de risque polygénique?
+## Objectif de l'analyse
 
-Un score de risque polygénique sert à évaluer le risque génétique d’avoir une condition, de développer cette condition, ou de développer des complications de cette condition. Ce score est calculé à partir de nombreux changements génétiques mineurs et qui sont fréquents dans la population. Chacun de ces variants a un petit effet sur le risque, mais tous ces effets peuvent être additionnés pour obtenir un score global, ce qui représente le score de risque polygénique. Ce score n’est pas un diagnostic, et il ne peut pas prédire avec précision si le patient développera la condition ou des complications de celle-ci. Il s’agit d’une estimation du risque comparativement au reste de la population.
+Un score de risque polygénique sert à évaluer le risque génétique d’avoir une condition, de développer cette condition et/ou des complications de cette condition. Ce score est calculé à partir de nombreux changements génétiques mineurs et qui sont fréquents dans la population. Chacun de ces variants a un petit effet sur le risque, mais tous ces effets peuvent être additionnés pour obtenir un score global, ce qui représente le score de risque polygénique. Ce score n’est pas un diagnostic, et il ne peut pas prédire avec précision si le patient développera la condition ou des complications de celle-ci. Il s’agit d’une estimation du risque comparativement au reste de la population.
 :::
 
-::: {.callout-tip}
-## Ce que ce résultat signifie
-*À compléter selon les besoins cliniques*; 
+::: {.callout-note}
+## Méthodologie
 
-***V.0.1, idea:***: Pour chaque score polygénique évalué, le profil génétique du patient est analysé en comparaison avec un groupe de référence génétiquement diversifié. Le percentile de risque final est déterminé en alignant le score individuel avec la population de référence présentant l’ascendance génétique la plus proche.
+**Séquençage en parallèle à haut débit du génome entier**: ***To fill in***.
+
+**Calcul des scores PGS (pgsc-calc)** : Les scores de risque polygénique ont été calculés avec le workflow [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) (Polygenic Score Catalog Calculator), qui automatise le téléchargement des fichiers de score depuis le PGS Catalog, l’appariement des variants entre ces fichiers et les échantillons cibles, et le calcul des PGS (somme linéaire des poids et dosages). Les scores présentés dans ce rapport proviennent du Polygenic Score Catalog et ont été calculés avec pgsc-calc (version 2.0.1) [^1].
+
+**Ajustement pour l’ascendance génétique** : La distribution des PGS variant selon l’ascendance génétique, les scores ont été contextualisés à l’aide du module d’ascendance de pgsc-calc (`--run_ancestry`). Un panel de référence (par défaut 1000 Genomes + HGDP) est utilisé pour une analyse en composantes principales (ACP) ; chaque individu cible est projeté dans cet espace pour déterminer la population de référence la plus proche. Le risque relatif est rapporté en comparant le PGS de l’individu à la distribution des scores dans cette population la plus similaire : en **percentile** (colonne `percentile_MostSimilarPop`) et en **Z-score** (colonne `Z_MostSimilarPop`), comme décrit dans la [documentation pgsc-calc sur l’ascendance](https://pgsc-calc.readthedocs.io/en/latest/explanation/geneticancestry.html) [^1].
+
 :::
 
 ::: {.callout-warning}
@@ -599,8 +659,6 @@ knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c")
 ```
 
 **Informations supplémentaires sur les scores de risque polygénique:** <br />
-
-Cette analyse a été ajustée avec le Z-score de la population la plus similaire (Z_MostSimilarPop) en utilisant [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) version 2.0.1 [^1].
 
 ```{r, echo=FALSE, warning=FALSE}
 # If metadata is available, display a compact table like the Catalog report, but
