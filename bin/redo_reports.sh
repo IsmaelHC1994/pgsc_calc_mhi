@@ -7,8 +7,8 @@
 set -euo pipefail
 
 # Configuration
-INPUT_DIR="${INPUT_DIR:-/home/ihc/tmp/hiro_pgsc_bak/ica_results}"
-OUTPUT_DIR="${OUTPUT_DIR:-/home/ihc/codebase/dev/regenerated_reports}"
+INPUT_DIR="${INPUT_DIR:-/home/ihc/codebase/dev/mhi-reports-bak/ica_results}"
+OUTPUT_DIR="${OUTPUT_DIR:-/home/ihc/codebase/dev/mhi-reports-bak/regenerated_reports}"
 TEMPLATE_FILE="${TEMPLATE_FILE:-/home/ihc/codebase/dev/patient_report_template_filtered.qmd}"
 # TEMPLATE_FILE="${TEMPLATE_FILE:-/home/ihc/codebase/dev/patient_report_template.qmd}"
 # TEMPLATE_FILE="${TEMPLATE_FILE:-/home/ihc/codebase/dev/patient_report_template_mhi_prs_debug.qmd}"
@@ -16,14 +16,19 @@ CONTAINER_IMAGE="${CONTAINER_IMAGE:-docker.io/ismaelhc94/pgsc-mhi-report:dev}"
 USE_DOCKER="${USE_DOCKER:-true}"
 INDICATION_CSV="${INDICATION_CSV:-/home/ihc/codebase/dev/corr_55samples_formatted.txt}"
 
-# For testing: process only the first sample if TEST_ONE is set
-# Pass as: TEST_ONE=true ./redo_reports.sh
-# Example (dev ica_results, one sample):
-#   INPUT_DIR=/path/to/dev/ica_results OUTPUT_DIR=/path/to/dev/regenerated_reports \
-#   TEMPLATE_FILE=/path/to/dev/patient_report_template_filtered.qmd \
-#   INDICATION_CSV=/path/to/dev/corr_55samples_formatted.txt \
-#   TEST_ONE=true ./redo_reports.sh
-TEST_ONE="${TEST_ONE:-false}"
+# Output format(s): html, docx, pdf, or combinations like "html,docx" (default).
+# PDF requires LaTeX in the environment. DOCX needs only Pandoc (bundled with Quarto).
+# The PDF format block is kept in the template but not rendered by default.
+OUTPUT_FORMAT="${OUTPUT_FORMAT:-html,docx}"
+
+# Process only the first sample by default. Override via env or CLI: --test_one=false to process all.
+TEST_ONE="${TEST_ONE:-true}"
+for arg in "$@"; do
+    case "$arg" in
+        --test_one=true|--test-one=true)  TEST_ONE=true ;;
+        --test_one=false|--test-one=false) TEST_ONE=false ;;
+    esac
+done
 
 # Function to map indication to PGS IDs
 # Returns comma-separated list of PGS IDs, or "all" if indication is "cardiopathies" or empty
@@ -125,6 +130,40 @@ get_dossier_for_sample() {
     ' "$csv_file" | head -1
 }
 
+# Function to get a named column value for a sample ID (#LDM) from CSV.
+# Usage: get_csv_column_for_sample <sample_id> <csv_file> <column_name>
+# Returns the column value or empty string if not found / column doesn't exist.
+get_csv_column_for_sample() {
+    local sample_id="$1"
+    local csv_file="$2"
+    local col_name="$3"
+    if [ ! -f "$csv_file" ]; then
+        echo ""
+        return
+    fi
+    awk -F',' -v sample="$sample_id" -v target="$col_name" '
+        NR == 1 {
+            for (i=1; i<=NF; i++) {
+                gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", $i)
+                if ($i == "#LDM") ldm_col = i
+                if ($i == target) target_col = i
+            }
+            if (!target_col) exit   # column not in CSV
+            next
+        }
+        {
+            ldm_val = $ldm_col
+            gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", ldm_val)
+            if (ldm_val == sample) {
+                v = $target_col
+                gsub(/^[ \t\r\n]+|[ \t\r\n]+$/, "", v)
+                print v
+                exit
+            }
+        }
+    ' "$csv_file" | head -1
+}
+
 # Colors for output
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -145,6 +184,7 @@ echo "=========================================="
 echo "Input directory: $INPUT_DIR"
 echo "Output directory: $OUTPUT_DIR"
 echo "Template: $TEMPLATE_FILE"
+echo "Output format(s): $OUTPUT_FORMAT"
 echo "Testing One Sample?: $TEST_ONE"
 echo "=========================================="
 echo
@@ -210,12 +250,20 @@ for run_dir in "$INPUT_DIR"/runWGS*; do
             echo "    Filtering to PGS IDs: $allowed_pgs_ids"
         fi
 
-        # Identifiers for report header/footer (Identifier1 = Dossier or run, Identifier2 = sample #LDM)
-        identifier1=$(get_dossier_for_sample "$sample_id" "$INDICATION_CSV")
+        # Identifiers for report header/footer.
+        # Priority: 1) identifier1/identifier2 columns in CSV, 2) Dossier/sample_id fallback
+        identifier1=$(get_csv_column_for_sample "$sample_id" "$INDICATION_CSV" "identifier1")
         if [ -z "$identifier1" ]; then
-            identifier1="$run_name"
+            identifier1=$(get_dossier_for_sample "$sample_id" "$INDICATION_CSV")
         fi
-        identifier2="$sample_id"
+        if [ -z "$identifier1" ]; then
+            identifier1="Identifier1"
+        fi
+        identifier2=$(get_csv_column_for_sample "$sample_id" "$INDICATION_CSV" "identifier2")
+        if [ -z "$identifier2" ]; then
+            identifier2="$sample_id"
+        fi
+        echo "    Identifiers: ID-1=$identifier1, ID-2=$identifier2"
 
         # Create temporary work directory for this sample
         work_dir=$(mktemp -d)
@@ -277,42 +325,68 @@ identifier1: "$identifier1"
 identifier2: "$identifier2"
 EOF
         
-        # Generate the report
-        output_file="$run_output_dir/patient_${sample_id}_report.html"
-        
-        if [ "$USE_DOCKER" = "true" ]; then
-            # Run with Docker
-            echo "    Running: docker run --rm -v $work_dir:/work -w /work $CONTAINER_IMAGE quarto render..."
-            if docker run --rm \
-                -v "$work_dir:/work" \
-                -w /work \
-                "$CONTAINER_IMAGE" \
-                quarto render working_patient_report_template.qmd \
-                --execute-params params.yml; then
-                
-                # Copy the generated report to output directory
-                cp "$work_dir/working_patient_report_template.html" "$output_file"
-                echo -e "  ${GREEN}✓ Successfully generated report for $sample_id${NC}"
-                successful=$((successful + 1))
+        # Generate the report. Quarto only produces one output per run, so we run once per format.
+        output_html="$run_output_dir/patient_${sample_id}_report.html"
+        output_pdf="$run_output_dir/patient_${sample_id}_report.pdf"
+        output_docx="$run_output_dir/patient_${sample_id}_report.docx"
+        # Parse requested formats (e.g. "html,docx" -> html docx)
+        formats=()
+        if [ -n "$OUTPUT_FORMAT" ]; then
+            IFS=',' read -ra formats <<< "$OUTPUT_FORMAT"
+        fi
+        # If no format list, render all formats in template (no --to)
+        render_success=true
+        if [ "${#formats[@]}" -eq 0 ]; then
+            if [ "$USE_DOCKER" = "true" ]; then
+                echo "    Running: docker run ... quarto render (all formats)..."
+                docker run --rm \
+                    -v "$work_dir:/work" \
+                    -w /work \
+                    "$CONTAINER_IMAGE" \
+                    quarto render working_patient_report_template.qmd \
+                    --execute-params params.yml || render_success=false
             else
-                echo -e "  ${RED}✗ Failed to generate report for $sample_id${NC}"
-                failed=$((failed + 1))
+                echo "    Running: quarto render (all formats)..."
+                (cd "$work_dir" && quarto render working_patient_report_template.qmd --execute-params params.yml) || render_success=false
             fi
         else
-            # Run without Docker (requires quarto installed locally)
-            echo "    Running: quarto render..."
-            cd "$work_dir"
-            if quarto render working_patient_report_template.qmd \
-                --execute-params params.yml; then
-                
-                cp "working_patient_report_template.html" "$output_file"
-                echo -e "  ${GREEN}✓ Successfully generated report for $sample_id${NC}"
-                successful=$((successful + 1))
-            else
-                echo -e "  ${RED}✗ Failed to generate report for $sample_id${NC}"
-                failed=$((failed + 1))
+            for fmt in "${formats[@]}"; do
+                fmt="$(echo "$fmt" | xargs)"
+                [ -z "$fmt" ] && continue
+                if [ "$USE_DOCKER" = "true" ]; then
+                    echo "    Running: docker run ... quarto render --to $fmt..."
+                    docker run --rm \
+                        -v "$work_dir:/work" \
+                        -w /work \
+                        "$CONTAINER_IMAGE" \
+                        quarto render working_patient_report_template.qmd \
+                        --execute-params params.yml --to "$fmt" || render_success=false
+                else
+                    echo "    Running: quarto render --to $fmt..."
+                    (cd "$work_dir" && quarto render working_patient_report_template.qmd --execute-params params.yml --to "$fmt") || render_success=false
+                fi
+            done
+        fi
+
+        if [ "$render_success" = true ]; then
+            # Copy only the files that exist (Quarto creates one per format when we run per-format)
+            if [ -f "$work_dir/working_patient_report_template.html" ]; then
+                cp "$work_dir/working_patient_report_template.html" "$output_html"
+                echo "    HTML: $output_html"
             fi
-            cd - > /dev/null
+            if [ -f "$work_dir/working_patient_report_template.pdf" ]; then
+                cp "$work_dir/working_patient_report_template.pdf" "$output_pdf"
+                echo "    PDF: $output_pdf"
+            fi
+            if [ -f "$work_dir/working_patient_report_template.docx" ]; then
+                cp "$work_dir/working_patient_report_template.docx" "$output_docx"
+                echo "    DOCX: $output_docx"
+            fi
+            echo -e "  ${GREEN}✓ Successfully generated report for $sample_id${NC}"
+            successful=$((successful + 1))
+        else
+            echo -e "  ${RED}✗ Failed to generate report for $sample_id${NC}"
+            failed=$((failed + 1))
         fi
         
         # Clean up work directory (trap will handle this automatically)

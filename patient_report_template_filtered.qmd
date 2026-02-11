@@ -1,6 +1,20 @@
 ---
 title: "Analyse du risque polygénique "
 format:
+  pdf:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    keep-tex: true
+    include-in-header:
+      text: |
+        \usepackage{fvextra}
+        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+          commandchars=\\\{\},
+          breaklines, breaknonspaceingroup, breakanywhere}
+  docx:
+    toc: true
+    toc-depth: 3
   html:
     toc: true  # Add table of contents for multiple scores
     embed-resources: true  # Make self-contained HTML with all resources embedded
@@ -13,39 +27,7 @@ format:
     fig-dpi: 300
     fig-format: "png"  # Added to ensure consistent rendering
     fig-retina: 2  # Added for better resolution
-    include-in-header:
-      text: |
-        <style>
-        .report-identifiers-footer {
-          position: fixed;
-          bottom: 0;
-          right: 0;
-          padding: 8px 16px;
-          font-size: 0.85rem;
-          color: #555;
-          background: #f8f9fa;
-          border-top: 1px solid #dee2e6;
-          border-left: 1px solid #dee2e6;
-          z-index: 999;
-        }
-        .report-identifiers-footer span { margin-left: 12px; }
-        </style>
-    include-after-body:
-      text: |
-        <div class="report-identifiers-footer" role="contentinfo">
-          <span id="footer-identifier1">Identifier1</span>
-          <span id="footer-identifier2">Identifier2</span>
-        </div>
-        <script>
-        (function() {
-          var p1 = document.querySelector('[data-identifier1-placeholder]');
-          var p2 = document.querySelector('[data-identifier2-placeholder]');
-          var f1 = document.getElementById('footer-identifier1');
-          var f2 = document.getElementById('footer-identifier2');
-          if (p1 && f1) f1.textContent = p1.textContent.trim();
-          if (p2 && f2) f2.textContent = p2.textContent.trim();
-        })();
-        </script>
+prefer-html: true
 
 execute:
   cache: false
@@ -322,6 +304,16 @@ scale_plot <- function(p) {
 }
 
 create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
+  # Scale down fonts and icons for PDF to avoid oversized elements (HTML uses 1)
+  pdf_scale <- if (knitr::is_latex_output()) 0.38 else 1
+  bs <- round(36 * pdf_scale)       # theme base_size
+  icon_lg <- round(22 * pdf_scale)  # large icons
+  icon_sm <- round(18 * pdf_scale)
+  lbl <- round(12 * pdf_scale)      # "Vous" and section labels
+  lbl_ax <- round(10 * pdf_scale)   # Risque faible/moyen/élevé
+  lbl_pct <- round(7 * pdf_scale)   # percentile text
+  tit <- round(44 * pdf_scale)      # plot title
+  seg_sz <- 2.5 * pdf_scale        # segment/line widths
   # Purple-to-red gradient version
   filtered_data <- if (!is.null(pgs_id)) {
     scores_popsim %>% dplyr::filter(PGS == pgs_id)
@@ -354,7 +346,7 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
     # Create smooth gradient using very subtle purple progression
     # Map: left (low risk) -> almost white lavender, right (high risk) -> medium lavender
     geom_segment(aes(x = x, xend = x, y = 0, yend = y, color = x), 
-                 size = 2.5, alpha = 0.9) +
+                 size = seg_sz, alpha = 0.9) +
     scale_color_gradientn(
       colours = c(
         "#F9F4FC",  # lightest purple - far left (low risk)
@@ -367,58 +359,58 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
       ), guide = "none"
     ) +
     # Bell curve outline
-    geom_line(color = "gray70", linewidth = 3, alpha = 0.9) +
+    geom_line(color = "gray70", linewidth = 3 * pdf_scale, alpha = 0.9) +
     # Visual thresholds (commented out - using gradient colors instead)
     # geom_vline(xintercept = c(t_low, t_high), linetype = "dashed",
     #            linewidth = 1.2, color = c("#5DADE2", "#E57373"), alpha = 0.6) +
     
     # Patient line (limited height to match bell curve, no arrow head)
     annotate("segment", x = patient_x, xend = patient_x, 
-             y = 0, yend = max_y, color = patient_line_color, linewidth = 3) +
+             y = 0, yend = max_y, color = patient_line_color, linewidth = 3 * pdf_scale) +
     
     # Add human icons in each risk zone using FontAwesome - positioned very close to x-axis
     # Low risk (left) - use light color
     annotate("text", x = -2.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
-             size = 22, color = "#F3E5F5") +  # very light purple - low risk
+             size = icon_lg, color = "#F3E5F5") +  # very light purple - low risk
     annotate("text", x = -0.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
-             size = 18, color = "gray50") +
+             size = icon_sm, color = "gray50") +
     annotate("text", x = 0, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
-             size = 18, color = "gray50") +
+             size = icon_sm, color = "gray50") +
     annotate("text", x = 0.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
-             size = 18, color = "gray50") +
+             size = icon_sm, color = "gray50") +
     # High risk (right) - use dark color
     annotate("text", x = 2.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
-             size = 22, color = "#7B1FA2") +  # dark purple - high risk
+             size = icon_lg, color = "#7B1FA2") +  # dark purple - high risk
     
     # Patient marker icon - positioned at bell curve height
     annotate("text", x = patient_x, y = max_y, 
              label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
-             size = 22, color = patient_line_color) +
+             size = icon_lg, color = patient_line_color) +
     # show "Vous" next to the marker line
     annotate("text", x = patient_x + 0.05, y = max_y*0.92, label = "Vous",
-             color = "black", size = 12, hjust = 0, vjust = 0.5) +
+             color = "black", size = lbl, hjust = 0, vjust = 0.5) +
     
     # Risk labels - positioned below the icons
-    annotate("text", x = -2.5, y = max_y*0.12, label = "Risque faible", size = 10) +
-    annotate("text", x = 0, y = max_y*0.12, label = "Risque moyen", size = 10) +
-    annotate("text", x = 2.5, y = max_y*0.12, label = "Risque élevé", size = 10) +
+    annotate("text", x = -2.5, y = max_y*0.12, label = "Risque faible", size = lbl_ax) +
+    annotate("text", x = 0, y = max_y*0.12, label = "Risque moyen", size = lbl_ax) +
+    annotate("text", x = 2.5, y = max_y*0.12, label = "Risque élevé", size = lbl_ax) +
     
     # Text below the patient marker line - larger text
     annotate("text", x = qnorm(patient_percentile/100), y = 0.45, 
              label = paste0("Votre score polygénique est au ", round(patient_percentile), "e percentile"), 
-             color = "black", size = 7) +
+             color = "black", size = lbl_pct) +
     
     # Limit y-axis to include text and remove axis ticks
     scale_y_continuous(limits = c(0, max_y), expand = expansion(mult = c(0, 0))) +
     
     # Publication theme without grids and axis ticks
-    theme_pubr(base_size = 36) +
+    theme_pubr(base_size = bs) +
     theme(
       panel.grid.major = element_blank(),
       panel.grid.minor = element_blank(),
@@ -427,8 +419,8 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
       axis.ticks.y = element_blank(),
       axis.text.x = element_blank(),
       axis.ticks.x = element_blank(),
-      plot.title = element_text(size = 44, face = "bold", hjust = 0.5),
-      plot.subtitle = element_text(size = 32, hjust = 0.5)
+      plot.title = element_text(size = tit, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = round(32 * pdf_scale), hjust = 0.5)
     ) +
     labs(
       title = paste("Score de risque polygénique :", if(!is.null(pgs_id)) pgs_id else "Global")
@@ -436,13 +428,13 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
     # Labels for risk sections - positioned outside the curve for better visibility
     annotate("text", x = -2.75, y = max_y*0.65, 
              label = "Moins d'individus ont un risque réduit", 
-             size = 12, color = "#2E2E2E", fontface = "bold") +
+             size = lbl, color = "#2E2E2E", fontface = "bold") +
     annotate("text", x = 0, y = max_y*0.65, 
              label = "La plupart des individus ont un risque moyen", 
-             size = 12, color = "#2E2E2E", fontface = "bold") +
+             size = lbl, color = "#2E2E2E", fontface = "bold") +
     annotate("text", x = 2.75, y = max_y*0.65, 
              label = "Moins d'individus ont un risque accru", 
-             size = 12, color = "#2E2E2E", fontface = "bold") +
+             size = lbl, color = "#2E2E2E", fontface = "bold") +
     # Quantile-based x-axis; keep y scale from earlier (0..0.5)
     scale_x_continuous(
       limits = c(-4, 4),
@@ -459,14 +451,14 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
 <!-- # Analyse du risque polygénique  -->
 <!-- **Date d'émission :** `r report_date` -->
 
-**Identifier1:** <span data-identifier1-placeholder>`r params$identifier1`</span> · **Identifier2:** <span data-identifier2-placeholder>`r params$identifier2`</span>
+**ID-1:** `r params$identifier1` · **ID-2:** `r params$identifier2`
 
 ::: {.callout-note}
 <!-- ## Ce rapport contient l'analyse des scores de risque polygénique (PGS) pour le patient **`r params$patient_id`**.    -->
 
-## Maladie/s ciblée/s : <strong>`r indication_display`</strong>
+**Maladie/s ciblée/s** : <strong>`r indication_display`</strong>
 
-Ce rapport affiche uniquement les scores PGS pertinents pour ces conditions (filtrage par indication).
+Ce rapport affiche uniquement les scores PGS pertinents pour ces conditions.
 
 :::
 
@@ -479,11 +471,11 @@ Un score de risque polygénique sert à évaluer le risque génétique d’avoir
 ::: {.callout-note}
 ## Méthodologie
 
-**Séquençage en parallèle à haut débit du génome entier**: ***To fill in***.
+**Séquençage en parallèle à haut débit du génome entier**: ***-----------***.
 
-**Calcul des scores PGS (pgsc-calc)** : Les scores de risque polygénique ont été calculés avec le workflow [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) (Polygenic Score Catalog Calculator), qui automatise le téléchargement des fichiers de score depuis le PGS Catalog, l’appariement des variants entre ces fichiers et les échantillons cibles, et le calcul des PGS (somme linéaire des poids et dosages). Les scores présentés dans ce rapport proviennent du Polygenic Score Catalog et ont été calculés avec pgsc-calc (version 2.0.1) [^1].
+**Calcul des scores PGS (pgsc-calc)** : Les scores de risque polygénique ont été calculés avec le workflow [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) (version 2.0.1), qui automatise le téléchargement des fichiers de score depuis le PGS Catalog, l’appariement des variants entre ces fichiers et les échantillons cibles, et le calcul des PGS (somme linéaire des poids et dosages). [^1].
 
-**Ajustement pour l’ascendance génétique** : La distribution des PGS variant selon l’ascendance génétique, les scores ont été contextualisés à l’aide du module d’ascendance de pgsc-calc (`--run_ancestry`). Un panel de référence (par défaut 1000 Genomes + HGDP) est utilisé pour une analyse en composantes principales (ACP) ; chaque individu cible est projeté dans cet espace pour déterminer la population de référence la plus proche. Le risque relatif est rapporté en comparant le PGS de l’individu à la distribution des scores dans cette population la plus similaire : en **percentile** (colonne `percentile_MostSimilarPop`) et en **Z-score** (colonne `Z_MostSimilarPop`), comme décrit dans la [documentation pgsc-calc sur l’ascendance](https://pgsc-calc.readthedocs.io/en/latest/explanation/geneticancestry.html) [^1].
+**Ajustement pour l’ascendance génétique** : La distribution des PGS variant selon l’ascendance génétique, les scores ont été contextualisés à l’aide du module d’ascendance de pgsc-calc. Un panel de référence (1000 Genomes + HGDP) est utilisé pour une analyse en composantes principales; chaque individu cible est projeté dans cet espace pour déterminer la population de référence la plus proche. Le risque relatif est rapporté en comparant le PGS de l’individu à la distribution des scores dans cette population la plus similaire [^2].
 
 :::
 
@@ -495,6 +487,8 @@ De plus, la validité des estimations de risque est directement liée à la ress
 :::
 
 [^1]: Lambert, S.A., Wingfield, B. et al. (2024) Enhancing the Polygenic Score Catalog with tools for score calculation and ancestry normalization. *Nature Genetics*. doi:10.1038/s41588-024-01937-x.
+
+[^2]: [Ancestry adjustment documentation](https://pgsc-calc.readthedocs.io/en/latest/explanation/geneticancestry.html).
 
 ::: {.callout-important}
 ## Comment lire le graphique de risque polygénique?
@@ -751,13 +745,8 @@ if (!is.null(pgs_metadata)) {
     # Rename columns for better display
     colnames(scorefile_metadata) <- c("PGS ID", "PGP ID", "Trait", "Variants", "Build")
     
-    # Render table
-    if (requireNamespace("DT", quietly = TRUE)) {
-      DT::datatable(scorefile_metadata, rownames = FALSE, escape = FALSE,
-                    options = list(dom = 't'))
-    } else {
-      knitr::kable(scorefile_metadata, format = "html", escape = FALSE)
-    }
+    # Render table (static kable for HTML and PDF)
+    knitr::kable(scorefile_metadata, escape = FALSE)
   }
 }
 
@@ -786,4 +775,13 @@ if (exists("custom_tbl") && nrow(custom_tbl) > 0) {
   knitr::kable(custom_tbl, format = "html", escape = FALSE)
 }
 ```
+
+---
+
+## Identifiants du rapport {.unnumbered}
+
+| Champ | Valeur |
+|-------|--------|
+| **ID-1** | `r params$identifier1` |
+| **ID-2** | `r params$identifier2` |
 
