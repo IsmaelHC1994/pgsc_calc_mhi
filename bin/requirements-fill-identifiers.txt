@@ -1,0 +1,4 @@
+# Optional dependency for fill_identifiers.py (DOCX footer support).
+# Install with: pip install -r requirements-fill-identifiers.txt
+# Without it, the script still does find/replace in DOCX and HTML but does not add the bottom-right footer to DOCX.
+python-docx>=0.8.11

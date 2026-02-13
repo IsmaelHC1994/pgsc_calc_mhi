@@ -4,6 +4,9 @@ fill_identifiers.py — Batch-fill patient identifiers in generated reports.
 
 Reads a CSV that maps sample IDs to identifier values, then does
 find-and-replace in the matching DOCX and/or HTML report files.
+For DOCX, also sets a bottom-right footer with "ID-1: ... · ID-2: ..."
+(requires python-docx: pip install python-docx). Optionally convert each DOCX to PDF
+with --convert-to-pdf (requires LibreOffice: soffice --headless).
 
 Usage:
     python fill_identifiers.py --csv identifiers.csv --reports-dir ./regenerated_reports
@@ -15,22 +18,30 @@ CSV format (minimum columns):
 
 The script searches reports-dir for files named patient_<sample_id>_report.docx
 and patient_<sample_id>_report.html, then replaces every occurrence of the
-placeholder text with the real values.
+placeholder text with the real values. DOCX files also get the footer when
+python-docx is installed.
 
 By default the placeholders are "Identifier1" and "Identifier2" (matching the
 Quarto template defaults). Override with --placeholder1 / --placeholder2.
 
-Requirements: Python 3.6+, no external packages.
+Requirements: Python 3.6+. For DOCX footer: pip install python-docx (optional).
 """
 
 import argparse
 import csv
 import os
-import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import zipfile
+
+try:
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    HAS_DOCX = True
+except ImportError:
+    HAS_DOCX = False
 
 
 def replace_in_html(filepath, replacements):
@@ -48,11 +59,63 @@ def replace_in_html(filepath, replacements):
     return changed
 
 
+def _replace_in_paragraph(paragraph, replacements):
+    """Replace placeholder strings in a paragraph (works when text is in one run)."""
+    changed = False
+    for old, new in replacements:
+        if old in paragraph.text:
+            # Replace in each run to avoid merging runs
+            for run in paragraph.runs:
+                if old in run.text:
+                    run.text = run.text.replace(old, new)
+                    changed = True
+    return changed
+
+
+def replace_in_docx_with_footer(filepath, replacements, id1, id2):
+    """
+    Use python-docx to replace placeholders in body and set a bottom-right footer.
+    Footer text: "ID-1: id1 · ID-2: id2".
+    """
+    doc = Document(filepath)
+    changed = False
+
+    # Replace in body paragraphs
+    for para in doc.paragraphs:
+        if _replace_in_paragraph(para, replacements):
+            changed = True
+
+    # Replace in table cells
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    if _replace_in_paragraph(para, replacements):
+                        changed = True
+
+    # Set footer on each section (bottom-right)
+    footer_text = f"ID-1: {id1} · ID-2: {id2}"
+    for section in doc.sections:
+        footer = section.footer
+        if footer.paragraphs:
+            p = footer.paragraphs[0]
+        else:
+            p = footer.add_paragraph()
+        p.text = footer_text
+        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        changed = True
+
+    if changed:
+        doc.save(filepath)
+    return changed
+
+
 def replace_in_docx(filepath, replacements):
     """
     Replace text inside a DOCX file (which is a ZIP of XML files).
     Works on Pandoc/Quarto-generated DOCX where placeholder text is not split
-    across XML runs.
+    across XML runs. Does not add a footer (use replace_in_docx_with_footer when
+    python-docx is available).
     """
     tmp_dir = tempfile.mkdtemp()
     try:
@@ -106,6 +169,37 @@ def find_report_files(reports_dir, sample_id):
     return matches
 
 
+def convert_docx_to_pdf(docx_path):
+    """
+    Convert a DOCX file to PDF using LibreOffice in headless mode.
+    Writes the PDF next to the DOCX (same directory).
+    Returns True if conversion succeeded, False otherwise.
+    """
+    docx_abs = os.path.abspath(docx_path)
+    out_dir = os.path.dirname(docx_abs)
+    for cmd in ("soffice", "libreoffice"):
+        try:
+            result = subprocess.run(
+                [
+                    cmd,
+                    "--headless",
+                    "--convert-to", "pdf",
+                    "--outdir", out_dir,
+                    docx_abs,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                return True
+        except FileNotFoundError:
+            continue
+        except subprocess.TimeoutExpired:
+            return False
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Batch-fill patient identifiers in generated DOCX/HTML reports."
@@ -129,6 +223,10 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Show what would be changed without modifying files"
+    )
+    parser.add_argument(
+        "--convert-to-pdf", action="store_true",
+        help="After updating each DOCX, convert it to PDF using LibreOffice (soffice --headless). Requires LibreOffice installed."
     )
     args = parser.parse_args()
 
@@ -171,6 +269,19 @@ def main():
     print(f"Loaded {len(rows)} rows from {args.csv}")
     print(f"Searching for reports in: {args.reports_dir}")
     print(f"Placeholders: '{args.placeholder1}' → identifier1,  '{args.placeholder2}' → identifier2")
+    if not HAS_DOCX:
+        print("Note: python-docx not installed — DOCX footer (bottom-right IDs) will not be set. Install with: pip install python-docx")
+    else:
+        print("DOCX: will set bottom-right footer with ID-1 and ID-2.")
+    can_convert_pdf = False
+    if args.convert_to_pdf:
+        can_convert_pdf = any(
+            shutil.which(c) for c in ("soffice", "libreoffice")
+        )
+        if not can_convert_pdf:
+            print("Warning: --convert-to-pdf requested but LibreOffice (soffice/libreoffice) not found in PATH. PDF conversion will be skipped.")
+        else:
+            print("PDF: will convert each updated DOCX to PDF (LibreOffice headless).")
     print()
 
     updated = 0
@@ -199,13 +310,22 @@ def main():
             if fpath.endswith(".html"):
                 ok = replace_in_html(fpath, replacements)
             elif fpath.endswith(".docx"):
-                ok = replace_in_docx(fpath, replacements)
+                if HAS_DOCX:
+                    ok = replace_in_docx_with_footer(fpath, replacements, id1, id2)
+                else:
+                    ok = replace_in_docx(fpath, replacements)
             else:
                 continue
 
             if ok:
                 print(f"  ✓ Updated: {relpath}")
                 updated += 1
+                if fpath.endswith(".docx") and args.convert_to_pdf and can_convert_pdf:
+                    if convert_docx_to_pdf(fpath):
+                        pdf_path = os.path.splitext(fpath)[0] + ".pdf"
+                        print(f"    → PDF: {os.path.relpath(pdf_path, args.reports_dir)}")
+                    else:
+                        print(f"    ⚠ PDF conversion failed for {relpath}")
             else:
                 print(f"  – Skipped (placeholders not found): {relpath}")
                 skipped += 1
