@@ -200,6 +200,20 @@ def convert_docx_to_pdf(docx_path):
     return False
 
 
+def backup_original_file(filepath, reports_dir, backup_dir):
+    """
+    Save one untouched copy of a report file before in-place edits.
+    Keeps a mirrored path under backup_dir and does not overwrite existing backups.
+    """
+    relpath = os.path.relpath(filepath, reports_dir)
+    backup_path = os.path.join(backup_dir, relpath)
+    os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+    if not os.path.exists(backup_path):
+        shutil.copy2(filepath, backup_path)
+        return backup_path
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Batch-fill patient identifiers in generated DOCX/HTML reports."
@@ -283,6 +297,9 @@ def main():
         else:
             print("PDF: will convert each updated DOCX to PDF (LibreOffice headless).")
     print()
+    backup_dir = os.path.join(args.reports_dir, "_original_backups")
+    print(f"Backups: original files will be copied once to {backup_dir}")
+    print()
 
     updated = 0
     not_found = 0
@@ -306,6 +323,10 @@ def main():
                 print(f"  [dry-run] Would update: {relpath}  ({args.placeholder1}→{id1}, {args.placeholder2}→{id2})")
                 updated += 1
                 continue
+
+            created_backup = backup_original_file(fpath, args.reports_dir, backup_dir)
+            if created_backup:
+                print(f"    backup: {os.path.relpath(created_backup, args.reports_dir)}")
 
             if fpath.endswith(".html"):
                 ok = replace_in_html(fpath, replacements)

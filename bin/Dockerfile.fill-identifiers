@@ -1,0 +1,26 @@
+# Container image for fill_identifiers.py: Python + python-docx + LibreOffice (PDF).
+#
+# Build (from this directory):
+#   podman build -f Dockerfile.fill-identifiers -t fill-identifiers:latest .
+#   # or: docker build -f Dockerfile.fill-identifiers -t fill-identifiers:latest .
+
+FROM python:3.11-slim-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libreoffice-writer \
+    fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements-fill-identifiers.txt ./
+RUN pip install --no-cache-dir --no-compile -r requirements-fill-identifiers.txt
+
+COPY fill_identifiers.py ./
+
+# Working directory for mounted reports (override with -w if needed)
+WORKDIR /work
+
+ENTRYPOINT ["python", "/app/fill_identifiers.py"]

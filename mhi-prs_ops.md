@@ -129,6 +129,8 @@ The script finds every `patient_<sample_id>_report.docx` and `.html` under the r
 
 **Who can do this**: anyone with Python (e.g. `bioinfo` env). No pipeline, Docker, or Quarto needed.
 
+**Container (Podman/Docker)**: A small image with Python, `python-docx`, and LibreOffice is defined in `bin/Dockerfile.fill-identifiers`. Build/run instructions: `bin/README-fill-identifiers-container.md`.
+
 ### Option C — Manual edit in Word/LibreOffice (one at a time)
 
 Open the `.docx`, Ctrl+H → Find `Identifier1` → Replace with the real value. Repeat for `Identifier2`. Save.
