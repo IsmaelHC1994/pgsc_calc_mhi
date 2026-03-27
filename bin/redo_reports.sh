@@ -7,14 +7,18 @@
 set -euo pipefail
 
 # Configuration
-INPUT_DIR="${INPUT_DIR:-/home/ihc/codebase/dev/mhi-reports-bak/ica_results}"
-OUTPUT_DIR="${OUTPUT_DIR:-/home/ihc/codebase/dev/mhi-reports-bak/regenerated_reports}"
-TEMPLATE_FILE="${TEMPLATE_FILE:-/home/ihc/codebase/dev/patient_report_template_filtered.qmd}"
-# TEMPLATE_FILE="${TEMPLATE_FILE:-/home/ihc/codebase/dev/patient_report_template.qmd}"
-# TEMPLATE_FILE="${TEMPLATE_FILE:-/home/ihc/codebase/dev/patient_report_template_mhi_prs_debug.qmd}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+DEV_DIR="${DEV_DIR:-$PROJECT_ROOT/dev}"
+
+INPUT_DIR="${INPUT_DIR:-$DEV_DIR/mhi-reports-bak/ica_results}"
+OUTPUT_DIR="${OUTPUT_DIR:-$DEV_DIR/mhi-reports-bak/regenerated_reports}"
+TEMPLATE_FILE="${TEMPLATE_FILE:-$DEV_DIR/patient_report_template_filtered.qmd}"
+# TEMPLATE_FILE="${TEMPLATE_FILE:-$DEV_DIR/patient_report_template.qmd}"
+# TEMPLATE_FILE="${TEMPLATE_FILE:-$DEV_DIR/patient_report_template_mhi_prs_debug.qmd}"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-docker.io/ismaelhc94/pgsc-mhi-report:dev}"
 USE_DOCKER="${USE_DOCKER:-true}"
-INDICATION_CSV="${INDICATION_CSV:-/home/ihc/codebase/dev/corr_55samples_formatted.txt}"
+INDICATION_CSV="${INDICATION_CSV:-$DEV_DIR/corr_55samples_formatted.txt}"
 
 # Output format(s): html, docx, pdf, or combinations like "html,docx" (default).
 # PDF requires LaTeX in the environment. DOCX needs only Pandoc (bundled with Quarto).
