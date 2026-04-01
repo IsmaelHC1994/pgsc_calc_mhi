@@ -471,12 +471,9 @@ Un score de risque polygénique sert à évaluer le risque génétique d’avoir
 ::: {.callout-note}
 ## Méthodologie
 
-**Séquençage en parallèle à haut débit du génome entier**: ***-----------***.
+**brief NGS description (clinical team)**: ***-----------***.
 
-**Calcul des scores PGS (pgsc-calc)** : Les scores de risque polygénique ont été calculés avec le workflow [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) (version 2.0.1), qui automatise le téléchargement des fichiers de score depuis le PGS Catalog, l’appariement des variants entre ces fichiers et les échantillons cibles, et le calcul des PGS (somme linéaire des poids et dosages). [^1].
-
-**Ajustement pour l’ascendance génétique** : La distribution des PGS variant selon l’ascendance génétique, les scores ont été contextualisés à l’aide du module d’ascendance de pgsc-calc. Un panel de référence (1000 Genomes + HGDP) est utilisé pour une analyse en composantes principales; chaque individu cible est projeté dans cet espace pour déterminer la population de référence la plus proche. Le risque relatif est rapporté en comparant le PGS de l’individu à la distribution des scores dans cette population la plus similaire [^2].
-
+**Calcul des scores PGS (pgsc-calc)** : Les analyses primaires et secondaires sont réalisées dans un environnement infonuagique sécurisé intégrant les pipelines BCL Convert et DRAGEN Germline (Illumina). Les fichiers de variants (VCF) générés par le pipeline DRAGEN Germline sont utilisés comme données d’entrée pour le calcul des scores de risque polygénique (PGS). Pour chaque modèle PGS du PGS Catalog, les génotypes observés sont interrogés aux positions génomiques définies par le score afin de déterminer les allèles portés par l’individu. Le score polygénique est ensuite calculé comme la somme pondérée des allèles de risque portés par l’individu, chaque variant étant pondéré par sa taille d’effet estimée dans le modèle. Les scores rapportés en génétique cardiovasculaire incluent notamment les cardiomyopathies, les arythmies et la maladie coronarienne. Le workflow [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) (version 2.0.1) automatise le téléchargement des fichiers de score depuis le PGS Catalog, l’appariement des variants et le calcul des PGS [^1]. En raison de l’impact de l’ascendance génétique sur la distribution des PGS variant, les scores sont ensuite contextualisés avec le module d’ascendance de pgsc-calc : un panel de référence (1000 Genomes + HGDP) est utilisé pour une analyse en composantes principales, chaque individu cible est projeté dans cet espace afin d’identifier la population de référence la plus proche, et le percentile est rapporté en comparant le PGS de l’individu à la distribution observée dans cette population [^2]. 
 :::
 
 ::: {.callout-warning}
