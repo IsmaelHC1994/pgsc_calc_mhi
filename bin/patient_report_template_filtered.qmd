@@ -584,15 +584,20 @@ for (pgs_id in patient_pgs_scores) {
   # add spacing
   cat("\n\n")
 
-  # Add risk direction text with arrow - dynamically sized to match plot width with integrated arrowheads
-  cat('<div style="display: flex; align-items: center; justify-content: space-between; font-size: 18px; margin-top: -20px; margin-bottom: 20px; width: 100%; padding: 0 2%;">')
-  cat('<span style="white-space: nowrap;"><strong>Risque plus faible</strong></span>')
-  cat('<span style="flex: 1; height: 3px; background-color: #333; margin: 0 20px; position: relative;">')
-  cat('<span style="position: absolute; left: -6px; top: -4px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-right: 6px solid #333;"></span>')
-  cat('<span style="position: absolute; right: -6px; top: -4px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid #333;"></span>')
-  cat('</span>')
-  cat('<span style="white-space: nowrap;"><strong>Risque plus élevé</strong></span>')
-  cat('</div>\n\n')
+  # Add risk direction text with a separator that works in both HTML and Word.
+  # Word strips the HTML/CSS flex layout, so use a plain markdown fallback there.
+  if (knitr::is_html_output()) {
+    cat('<div style="display: flex; align-items: center; justify-content: space-between; font-size: 18px; margin-top: -20px; margin-bottom: 20px; width: 100%; padding: 0 2%;">')
+    cat('<span style="white-space: nowrap;"><strong>Risque plus faible</strong></span>')
+    cat('<span style="flex: 1; height: 3px; background-color: #333; margin: 0 20px; position: relative;">')
+    cat('<span style="position: absolute; left: -6px; top: -4px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-right: 6px solid #333;"></span>')
+    cat('<span style="position: absolute; right: -6px; top: -4px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid #333;"></span>')
+    cat('</span>')
+    cat('<span style="white-space: nowrap;"><strong>Risque plus élevé</strong></span>')
+    cat('</div>\n\n')
+  } else {
+    cat("**Risque plus faible** -------------------------------- **Risque plus élevé**\n\n")
+  }
   
   # continue explanation text
   cat("\n\n")
@@ -781,4 +786,3 @@ if (exists("custom_tbl") && nrow(custom_tbl) > 0) {
 |-------|--------|
 | **ID-1** | `r params$identifier1` |
 | **ID-2** | `r params$identifier2` |
-

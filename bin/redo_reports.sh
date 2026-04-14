@@ -13,7 +13,7 @@ DEV_DIR="${DEV_DIR:-$PROJECT_ROOT/dev}"
 
 INPUT_DIR="${INPUT_DIR:-$DEV_DIR/mhi-reports-bak/ica_results}"
 OUTPUT_DIR="${OUTPUT_DIR:-$DEV_DIR/mhi-reports-bak/regenerated_reports}"
-TEMPLATE_FILE="${TEMPLATE_FILE:-$DEV_DIR/patient_report_template_filtered.qmd}"
+TEMPLATE_FILE="${TEMPLATE_FILE:-$SCRIPT_DIR/patient_report_template_filtered.qmd}"
 # TEMPLATE_FILE="${TEMPLATE_FILE:-$DEV_DIR/patient_report_template.qmd}"
 # TEMPLATE_FILE="${TEMPLATE_FILE:-$DEV_DIR/patient_report_template_mhi_prs_debug.qmd}"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-docker.io/ismaelhc94/pgsc-mhi-report:dev}"
