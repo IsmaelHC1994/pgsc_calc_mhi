@@ -2,7 +2,7 @@
 ### mhi - report
 ---
 
-- [ ] #work mhi-wgs-prs  work on report docker file + review pipeline/workflow and TEXT for report ⏳ 2026-04-13 
+- [ ] #work mhi-wgs-prs  work on report docker file + review pipeline/workflow  ⏳ 2026-04-20
 	- **Report**: add methodology, do a clean text revision, add 2 identifiers at top, at the bottom right page for each page of the report
 		- need Rafik requested PGS for each id
 		- will need to contact and prepare script to update ica report html output 

@@ -2,7 +2,7 @@
 title: "Analyse du risque polygénique "
 format:
   pdf:
-    toc: true
+    toc: false
     toc-depth: 3
     number-sections: true
     keep-tex: true
@@ -13,18 +13,18 @@ format:
           commandchars=\\\{\},
           breaklines, breaknonspaceingroup, breakanywhere}
   docx:
-    toc: true
+    toc: false
     toc-depth: 3
   html:
-    toc: true  # Add table of contents for multiple scores
+    toc: false
     embed-resources: true  # Make self-contained HTML with all resources embedded
     self-contained: true  # Ensure all resources are embedded
-    fig-width: 12  # Increased from 8
-    fig-height: 8  # Increased from 6
+    fig-width: 14
+    fig-height: 9
     theme: default
     code-fold: true
     code-tools: false
-    fig-dpi: 300
+    fig-dpi: 400
     fig-format: "png"  # Added to ensure consistent rendering
     fig-retina: 2  # Added for better resolution
 prefer-html: true
@@ -89,6 +89,19 @@ publication_theme <- function(base_size = 24) {
 
 # Get current date in a nice format
 report_date <- format(Sys.Date(), "%Y-%m-%d")
+
+# Generate a fixed risk-direction image for non-HTML outputs (especially Word)
+risk_arrow_image <- "risk_scale_arrow.png"
+if (!file.exists(risk_arrow_image)) {
+  grDevices::png(risk_arrow_image, width = 1800, height = 180, bg = "white", res = 220)
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+  plot.window(xlim = c(0, 1), ylim = c(0, 1))
+  text(0.10, 0.55, "Risque plus faible", cex = 1.9, font = 2, xpd = NA)
+  text(0.90, 0.55, "Risque plus eleve", cex = 1.9, font = 2, xpd = NA)
+  arrows(0.24, 0.55, 0.76, 0.55, code = 3, angle = 20, length = 0.08, lwd = 6, col = "#333333")
+  dev.off()
+}
 
 
 ```
@@ -304,16 +317,16 @@ scale_plot <- function(p) {
 }
 
 create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
-  # Scale down fonts and icons for PDF to avoid oversized elements (HTML uses 1)
-  pdf_scale <- if (knitr::is_latex_output()) 0.38 else 1
-  bs <- round(36 * pdf_scale)       # theme base_size
-  icon_lg <- round(22 * pdf_scale)  # large icons
-  icon_sm <- round(18 * pdf_scale)
-  lbl <- round(12 * pdf_scale)      # "Vous" and section labels
-  lbl_ax <- round(10 * pdf_scale)   # Risque faible/moyen/élevé
-  lbl_pct <- round(7 * pdf_scale)   # percentile text
-  tit <- round(44 * pdf_scale)      # plot title
-  seg_sz <- 2.5 * pdf_scale        # segment/line widths
+  # Larger default sizing for sharper, more legible outputs; PDF still scaled down.
+  render_scale <- if (knitr::is_latex_output()) 0.42 else if (knitr::pandoc_to("docx")) 1.25 else 1.5
+  bs <- round(44 * render_scale)       # theme base_size
+  icon_lg <- round(27 * render_scale)  # large icons
+  icon_sm <- round(22 * render_scale)
+  lbl_ax <- round(20 * render_scale)   # Risque faible/moyen/élevé
+  lbl <- round(16 * render_scale)      # "Vous" and section labels
+  lbl_pct <- round(18 * render_scale)  # percentile text
+  tit <- round(52 * render_scale)      # plot title
+  seg_sz <- 3.0 * render_scale         # segment/line widths
   # Purple-to-red gradient version
   filtered_data <- if (!is.null(pgs_id)) {
     scores_popsim %>% dplyr::filter(PGS == pgs_id)
@@ -334,6 +347,7 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
   y_vals <- dnorm(x_vals)
   df_bell <- tibble(x = x_vals, y = y_vals)
   max_y <- max(df_bell$y)
+  top_y <- max_y * 1.18
   patient_x <- qnorm(patient_percentile/100)
   # pastel line color that contrasts with all three panels
   patient_line_color <- "#8B5CF6"  # pastel violet
@@ -359,14 +373,14 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
       ), guide = "none"
     ) +
     # Bell curve outline
-    geom_line(color = "gray70", linewidth = 3 * pdf_scale, alpha = 0.9) +
+    geom_line(color = "gray70", linewidth = 3 * render_scale, alpha = 0.9) +
     # Visual thresholds (commented out - using gradient colors instead)
     # geom_vline(xintercept = c(t_low, t_high), linetype = "dashed",
     #            linewidth = 1.2, color = c("#5DADE2", "#E57373"), alpha = 0.6) +
     
     # Patient line (limited height to match bell curve, no arrow head)
     annotate("segment", x = patient_x, xend = patient_x, 
-             y = 0, yend = max_y, color = patient_line_color, linewidth = 3 * pdf_scale) +
+             y = 0, yend = max_y, color = patient_line_color, linewidth = 3 * render_scale) +
     
     # Add human icons in each risk zone using FontAwesome - positioned very close to x-axis
     # Low risk (left) - use light color
@@ -388,12 +402,12 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
              size = icon_lg, color = "#7B1FA2") +  # dark purple - high risk
     
     # Patient marker icon - positioned at bell curve height
-    annotate("text", x = patient_x, y = max_y, 
+    annotate("text", x = patient_x, y = max_y * 1.03, 
              label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
              size = icon_lg, color = patient_line_color) +
     # show "Vous" next to the marker line
-    annotate("text", x = patient_x + 0.05, y = max_y*0.92, label = "Vous",
+    annotate("text", x = patient_x + 0.05, y = max_y*0.97, label = "Vous",
              color = "black", size = lbl, hjust = 0, vjust = 0.5) +
     
     # Risk labels - positioned below the icons
@@ -402,12 +416,12 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
     annotate("text", x = 2.5, y = max_y*0.12, label = "Risque élevé", size = lbl_ax) +
     
     # Text below the patient marker line - larger text
-    annotate("text", x = qnorm(patient_percentile/100), y = 0.45, 
-             label = paste0("Votre score polygénique est au ", round(patient_percentile), "e percentile"), 
+    annotate("text", x = qnorm(patient_percentile/100), y = max_y*0.06, 
+             label = paste0("Votre score polygénique est au percentile ", round(patient_percentile)), 
              color = "black", size = lbl_pct) +
     
-    # Limit y-axis to include text and remove axis ticks
-    scale_y_continuous(limits = c(0, max_y), expand = expansion(mult = c(0, 0))) +
+    # Prevent top clipping of marker/text while keeping compact layout
+    scale_y_continuous(limits = c(0, top_y), expand = expansion(mult = c(0, 0))) +
     
     # Publication theme without grids and axis ticks
     theme_pubr(base_size = bs) +
@@ -420,7 +434,8 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
       axis.text.x = element_blank(),
       axis.ticks.x = element_blank(),
       plot.title = element_text(size = tit, face = "bold", hjust = 0.5),
-      plot.subtitle = element_text(size = round(32 * pdf_scale), hjust = 0.5)
+      plot.subtitle = element_text(size = round(36 * render_scale), hjust = 0.5),
+      plot.margin = margin(t = 20, r = 10, b = ifelse(knitr::pandoc_to("docx"), 0, 15), l = 10)
     ) +
     labs(
       title = paste("Score de risque polygénique :", if(!is.null(pgs_id)) pgs_id else "Global")
@@ -465,7 +480,7 @@ Ce rapport affiche uniquement les scores PGS pertinents pour ces conditions.
 ::: {.callout-tip}
 ## Objectif de l'analyse
 
-Un score de risque polygénique sert à évaluer le risque génétique d’avoir une condition, de développer cette condition et/ou des complications de cette condition. Ce score est calculé à partir de nombreux changements génétiques mineurs et qui sont fréquents dans la population. Chacun de ces variants a un petit effet sur le risque, mais tous ces effets peuvent être additionnés pour obtenir un score global, ce qui représente le score de risque polygénique. Ce score n’est pas un diagnostic, et il ne peut pas prédire avec précision si le patient développera la condition ou des complications de celle-ci. Il s’agit d’une estimation du risque comparativement au reste de la population.
+Un score de risque polygénique sert à évaluer le risque génétique d’avoir une condition, de développer cette condition et/ou des complications de cette condition. Ce score est calculé à partir de nombreux changements génétiques mineurs et qui sont fréquents dans la population. Chacun de ces variants a un petit effet sur le risque, mais tous ces effets peuvent être additionnés pour obtenir un score global, ce que représente le score de risque polygénique. Ce score n’est pas un diagnostic, et il ne peut pas prédire avec précision si le patient développera la condition ou des complications de celle-ci. Il s’agit d’une estimation du risque comparativement au reste de la population.
 :::
 
 ::: {.callout-note}
@@ -473,14 +488,14 @@ Un score de risque polygénique sert à évaluer le risque génétique d’avoir
 
 **brief NGS description (clinical team)**: ***-----------***.
 
-**Calcul des scores PGS (pgsc-calc)** : Les analyses primaires et secondaires sont réalisées dans un environnement infonuagique sécurisé intégrant les pipelines BCL Convert et DRAGEN Germline (Illumina). Les fichiers de variants (VCF) générés par le pipeline DRAGEN Germline sont utilisés comme données d’entrée pour le calcul des scores de risque polygénique (PGS). Pour chaque modèle PGS du PGS Catalog, les génotypes observés sont interrogés aux positions génomiques définies par le score afin de déterminer les allèles portés par l’individu. Le score polygénique est ensuite calculé comme la somme pondérée des allèles de risque portés par l’individu, chaque variant étant pondéré par sa taille d’effet estimée dans le modèle. Les scores rapportés en génétique cardiovasculaire incluent notamment les cardiomyopathies, les arythmies et la maladie coronarienne. Le workflow [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) (version 2.0.1) automatise le téléchargement des fichiers de score depuis le PGS Catalog, l’appariement des variants et le calcul des PGS [^1]. En raison de l’impact de l’ascendance génétique sur la distribution des PGS variant, les scores sont ensuite contextualisés avec le module d’ascendance de pgsc-calc : un panel de référence (1000 Genomes + HGDP) est utilisé pour une analyse en composantes principales, chaque individu cible est projeté dans cet espace afin d’identifier la population de référence la plus proche, et le percentile est rapporté en comparant le PGS de l’individu à la distribution observée dans cette population [^2]. 
+**Calcul des scores PGS (pgsc-calc)** : Les analyses primaires et secondaires sont réalisées dans un environnement infonuagique sécurisé intégrant les pipelines BCL Convert et DRAGEN Germline (Illumina). Les fichiers de variants (VCF) générés par le pipeline DRAGEN Germline sont utilisés comme données d’entrée pour le calcul des scores de risque polygénique (PGS). Le score polygénique est calculé comme la somme pondérée des allèles de risque portés par l’individu. Le workflow [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) (version 2.0.1) automatise le téléchargement des fichiers de score depuis le PGS Catalog, l’appariement des variants et le calcul des PGS [^1]. En raison de l’impact de l’ascendance génétique sur la distribution des PGS, les scores sont ensuite contextualisés avec le module d’ascendance de pgsc-calc : un panel de référence (1000 Genomes + HGDP) est utilisé pour une analyse en composantes principales, chaque individu cible est projeté dans cet espace afin d’identifier la population de référence la plus proche, et le percentile est rapporté en comparant le PGS de l’individu à la distribution observée dans cette population [^2]. 
 :::
 
 ::: {.callout-warning}
 ## Limites des scores de risque polygéniques
-Les scores de risque polygénique ne prennent pas en compte tous les facteurs influençant le risque de développer une condition, comme des variants génétiques rares, l'âge, les antécédents médicaux, les habitudes de vie ou l'environnement. Ils servent d'indicateurs prédictifs et ne constituent pas un outil diagnostique. Ces scores comportent une marge d'incertitude significative; ainsi, un individu avec un score élevé peut ne jamais développer la condition, tandis qu'un individu avec un score faible peut développer la condition. <br />
+Les scores de risque polygénique ne prennent pas en compte tous les facteurs influençant le risque de développer une condition, comme des variants génétiques plus rares, l'âge, les comorbidités et les habitudes de vie. Ils servent d'indicateurs prédictifs et ne constituent pas un outil diagnostique. Ces scores comportent une marge d'incertitude significative; ainsi, un individu avec un score élevé peut ne jamais développer la condition, tandis qu'un individu avec un score faible peut développer la condition. <br />
 
-De plus, la validité des estimations de risque est directement liée à la ressemblance avec les cohortes initiales ayant servi à l’élaboration du score. Par exemple, un score polygénique développé dans une population d’origine ancestrale européenne aura une performance plus élevée chez les individus d’origine ancestrale européenne que des individus d’autres origines. Au fait, les scores de risque polygénique sont principalement basés sur des données génomiques d'individus d'origine ethnique européenne. Pour mieux tenir compte des différences génétiques entre différentes populations, une méthode d'ajustement basée sur l'ascendance est appliquée (PMID: 39327485). Cette correction améliore la généralisation des scores chez des individus de différentes origines, mais elle ne permet pas d'éliminer totalement le biais de généralisation. Les scores de risque polygéniques peuvent donc être moins fiables chez les personnes issues de populations non européennes.
+De plus, la validité des estimations de risque est directement liée à la ressemblance avec les cohortes initiales ayant servi à l’élaboration du score. Par exemple, un score polygénique développé dans une population d’origine ancestrale européenne aura une performance plus élevée chez les individus d’origine ancestrale européenne que des individus d’autres origines. Au fait, les scores de risque polygénique sont principalement basés sur des données génomiques d'individus d'origine ethnique européenne. Bien qu’une méthode d'ajustement basée sur l'ascendance est appliquée (PMID: 39327485), cette correction améliore la généralisation des scores chez des individus de différentes origines, mais elle ne permet pas d'éliminer totalement le biais de généralisation. Les scores de risque polygéniques peuvent donc être moins fiables chez les personnes issues de populations non européennes.
 :::
 
 [^1]: Lambert, S.A., Wingfield, B. et al. (2024) Enhancing the Polygenic Score Catalog with tools for score calculation and ancestry normalization. *Nature Genetics*. doi:10.1038/s41588-024-01937-x.
@@ -489,14 +504,15 @@ De plus, la validité des estimations de risque est directement liée à la ress
 
 ::: {.callout-important}
 ## Comment lire le graphique de risque polygénique?
-Le graphiques montre où se situe le score de risque polygénique du patient (ligne verticale) par rapport à la population générale ajustée pour l’origine ancestrale. La plupart des personnes ont un score situé vers le centre de la courbe, ce qui correspond à un risque génétique moyen. Moins de personnes se trouvent aux extrémités. Un score plus à gauche indique un risque plus faible que la moyenne. Un score au centre indique un risque moyen. Un score plus à droite indique un risque plus élevé que la moyenne. Les détails des scores utilisés dans ces graphiques se trouvent à la fin du Rapport.
+Le graphique montre où se situe le score de risque polygénique du patient (ligne verticale) par rapport à la population générale ayant une origine ancestrale semblable. La plupart des personnes ont un score situé vers le centre de la courbe, ce qui correspond à un risque génétique moyen. Moins de personnes se trouvent aux extrémités. Un score plus à gauche indique un risque plus faible que la moyenne. Un score au centre indique un risque moyen. Un score plus à droite indique un risque plus élevé que la moyenne. Les détails des scores utilisés dans ces graphiques se trouvent à la fin du Rapport.
 :::
 
-```{r generate-sections, results='asis', echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=8, out.width="100%"}
-#| fig-width: 12
-#| fig-height: 8
+```{r generate-sections, results='asis', echo=FALSE, warning=FALSE, message=FALSE, fig.width=14, fig.height=9, out.width="100%"}
+#| fig-width: 14
+#| fig-height: 9
 #| out-width: "100%"
-#| fig-dpi: 300
+#| fig-dpi: 400
+#| fig-format: "png"
 
 # Loop through each PRS score and create a section for it
 for (pgs_id in patient_pgs_scores) {
@@ -575,17 +591,18 @@ for (pgs_id in patient_pgs_scores) {
   # Generate the summary text
   # cat("**Résumé des résultats :**\n\n")
 
-  cat("Le score se situe au <strong>", patient_percentile, "e percentile</strong>. Cela signifie que, ", patient_percentile, "% de la population a un risque inférieur ou égal d'avoir cette condition, tandis que ", 100 - patient_percentile, "% de la population a un risque supérieur. Ceci ne correspond <u>pas</u> à un risque de ", patient_percentile, "% de développer cette condition. Voici une représentation visuelle du risque pour faciliter la communication du résultat avec le patient:\n\n")
+  cat("Le score se situe au <strong>percentile ", patient_percentile, "</strong>. Cela signifie que, ", patient_percentile, "% de la population a un risque inférieur ou égal d'avoir cette condition, tandis que ", 100 - patient_percentile, "% de la population a un risque supérieur. Ceci ne correspond <u>pas</u> à un risque de ", patient_percentile, "% de développer cette condition. Voici une représentation visuelle du risque pour faciliter la communication du résultat avec le patient:\n\n")
   
   # Create and print bell curve visualizations
   bell_curve_plot <- create_bell_curve_purple_viz(params$patient_id, pgs_id)
   print(bell_curve_plot)
 
-  # add spacing
-  cat("\n\n")
+  # Add spacing for HTML/PDF only; keep Word arrow attached to the plot.
+  if (!knitr::pandoc_to("docx")) {
+    cat("\n\n")
+  }
 
-  # Add risk direction text with a separator that works in both HTML and Word.
-  # Word strips the HTML/CSS flex layout, so use a plain markdown fallback there.
+  # Add risk direction text with output-specific rendering.
   if (knitr::is_html_output()) {
     cat('<div style="display: flex; align-items: center; justify-content: space-between; font-size: 18px; margin-top: -20px; margin-bottom: 20px; width: 100%; padding: 0 2%;">')
     cat('<span style="white-space: nowrap;"><strong>Risque plus faible</strong></span>')
@@ -595,8 +612,10 @@ for (pgs_id in patient_pgs_scores) {
     cat('</span>')
     cat('<span style="white-space: nowrap;"><strong>Risque plus élevé</strong></span>')
     cat('</div>\n\n')
+  } else if (knitr::pandoc_to("docx")) {
+    cat("![](risk_scale_arrow.png){width=100%}\n")
   } else {
-    cat("**Risque plus faible** -------------------------------- **Risque plus élevé**\n\n")
+    cat("**Risque plus faible** \\hfill **Risque plus élevé**\n\n")
   }
   
   # continue explanation text
@@ -657,132 +676,146 @@ knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c")
 **Informations supplémentaires sur les scores de risque polygénique:** <br />
 
 ```{r, echo=FALSE, warning=FALSE}
-# If metadata is available, display a compact table like the Catalog report, but
-# restricted to the scores used for this patient
+# Build a compact table restricted to scores used for this patient.
+# Includes Catalog scores (with metadata) and custom scores ("Non-publié").
+
+# Keep only true PGS accessions (e.g., PGS005168) used by this patient
+patient_base_ids <- unique(stringr::str_extract(patient_pgs_list, "^(PGS[0-9]+)"))
+patient_base_ids <- patient_base_ids[!is.na(patient_base_ids) & patient_base_ids != ""]
+
+# Helper extractors
+extract_chr_handle_null <- function(x, field) {
+  return(replace(x[[field]], is.null(x[[field]]), ""))
+}
+link_pgscatalog <- function(id, link_type) {
+  if (id != "") stringr::str_glue('<a href="https://www.pgscatalog.org/{link_type}/{id}">{id}</a>') else id
+}
+add_note <- function(id, note) {
+  if (id != "" && note != "") {
+    return(stringr::str_glue("{id} <br /> <small>{note}</small>"))
+  } else {
+    return(id)
+  }
+}
+link_traits <- function(trait_efo, mapped) {
+  if (length(trait_efo) == 0) {
+    return("")
+  } else {
+    return(purrr::map2_chr(trait_efo, mapped, ~ stringr::str_glue('<a href="http://www.ebi.ac.uk/efo/{.x}">{.y}</a>')))
+  }
+}
+extract_traits <- function(x) {
+  trait_efo <- purrr::map(x, ~ extract_chr_handle_null(.x$header, "trait_efo"))
+  mapped <- purrr::map(x, ~ extract_chr_handle_null(.x$header, "trait_mapped"))
+  trait_display <- purrr::map2(trait_efo, mapped, link_traits)
+  mapped_trait_links <- purrr::map_chr(trait_display, ~ paste(.x, collapse = "<br />"))
+  reported_traits <- purrr::map(x, ~ extract_chr_handle_null(.x, "trait_reported"))
+  purrr::map2_chr(reported_traits, mapped_trait_links, ~ {
+    stringr::str_glue("<u>Reported trait:</u> {.x} <br /> <u>Mapped trait(s):</u> {.y}")
+  })
+}
+
+# Try to extract variant counts from score table for custom scores when available
+variant_count_cols <- names(scores)[names(scores) %in% c(
+  "N_Variants", "N_VARIANTS", "variants_number", "num_variants",
+  "n_variants", "n_snps", "SNP_COUNT", "VARIANT_COUNT"
+)]
+custom_variant_lookup <- if (length(variant_count_cols) > 0) {
+  scores %>%
+    filter(PGS %in% patient_pgs_list) %>%
+    group_by(PGS) %>%
+    summarise(n_variants = as.character(first(na.omit(as.character(.data[[variant_count_cols[[1]]]])))), .groups = "drop")
+} else {
+  tibble(PGS = character(), n_variants = character())
+}
+
+catalog_metadata <- tibble::tibble(
+  pgs_id = character(),
+  pgp_id = character(),
+  trait_display = character(),
+  n_variants = character(),
+  genome_build = character()
+)
+
 if (!is.null(pgs_metadata)) {
-  # Keep only true PGS accessions (e.g., PGS005168) used by this patient
-  patient_base_ids <- unique(stringr::str_extract(patient_pgs_list, "^(PGS[0-9]+)"))
-  patient_base_ids <- patient_base_ids[!is.na(patient_base_ids) & patient_base_ids != ""]
-  json_list <- pgs_metadata
-  # helper extractors
-  extract_chr_handle_null <- function(x, field) {
-    return(replace(x[[field]], is.null(x[[field]]), ""))
-  }
-  link_pgscatalog <- function(id, link_type) {
-    if (id != "") stringr::str_glue('<a href="https://www.pgscatalog.org/{link_type}/{id}">{id}</a>') else id
-  }
-  
-  add_note <- function(id, note) {
-    if (id != "" && note != "") {
-      return(stringr::str_glue("{id} <br /> <small>{note}</small>"))
-    } else {
-      return(id)
-    }
-  }
-  
-  link_traits <- function(trait_efo, mapped) {
-    if (length(trait_efo) == 0) {
-      return("")
-    } else {
-      return(purrr::map2_chr(trait_efo, mapped, ~ stringr::str_glue('<a href="http://www.ebi.ac.uk/efo/{.x}">{.y}</a>')))
-    }
-  }
-  
-  extract_traits <- function(x) {
-    trait_efo <- purrr::map(x, ~ extract_chr_handle_null(.x$header, "trait_efo"))
-    mapped <- purrr::map(x, ~ extract_chr_handle_null(.x$header, "trait_mapped"))
-    trait_display <- purrr::map2(trait_efo, mapped, link_traits)
-    mapped_trait_links <- purrr::map_chr(trait_display, ~ paste(.x, collapse = "<br />"))
-    reported_traits <- purrr::map(x, ~ extract_chr_handle_null(.x, "trait_reported"))
-    purrr::map2_chr(reported_traits, mapped_trait_links, ~ {
-      stringr::str_glue("<u>Reported trait:</u> {.x} <br /> <u>Mapped trait(s):</u> {.y}")
-    })
-  }
-  # filter json entries to those used in this patient (Catalog-only)
-  json_list_patient <- purrr::keep(json_list, ~ .x$pgs_id %in% patient_base_ids)
+  json_list_patient <- purrr::keep(pgs_metadata, ~ .x$pgs_id %in% patient_base_ids)
   if (length(json_list_patient) > 0) {
-  # Create metadata table for Catalog scores
-  catalog_metadata <- tibble::tibble(
-    pgs_id = purrr::map_chr(json_list_patient, "pgs_id"),
-    pgs_name = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "pgs_name")),
-    pgp_id = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "pgp_id")),
-    citation = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "citation")),
-    trait_display = purrr::map2_chr(
-      json_list_patient, 
-      extract_traits(json_list_patient),
-      ~ {
-        # Check fixed mapping first
-        french_label <- get_french_label(.x$pgs_id)
-        if (!is.null(french_label)) {
-          # Use French label from fixed mapping
-          return(stringr::str_glue("<u>Trait:</u> {french_label}"))
-        } else {
-          # Fall back to metadata extraction
-          return(.y)
+    catalog_metadata <- tibble::tibble(
+      pgs_id = purrr::map_chr(json_list_patient, "pgs_id"),
+      pgs_name = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "pgs_name")),
+      pgp_id = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "pgp_id")),
+      citation = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "citation")),
+      trait_display = purrr::map2_chr(
+        json_list_patient,
+        extract_traits(json_list_patient),
+        ~ {
+          french_label <- get_french_label(.x$pgs_id)
+          if (!is.null(french_label)) french_label else .y
         }
-      }
-    ),
-    n_variants = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "variants_number")),
-    genome_build = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "genome_build")),
-    harmonised_build = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "HmPOS_build"))
-  ) %>%
+      ),
+      n_variants = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "variants_number")),
+      genome_build = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "genome_build")),
+      harmonised_build = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "HmPOS_build"))
+    ) %>%
       dplyr::mutate(
         pgs_id = purrr::map2_chr(pgs_id, pgs_name, ~ add_note(link_pgscatalog(.x, "score"), .y)),
         pgp_id = purrr::map2_chr(pgp_id, citation, ~ add_note(link_pgscatalog(.x, "publication"), .y)),
         genome_build = purrr::map2_chr(genome_build, harmonised_build, ~ {
           if (.y != "") {
-            stringr::str_glue("<u>Original build:</u> {.x} <br /> <u>Harmonised build:</u> {.y}")
+            stringr::str_glue("<u>Assemblage d'origine :</u> {.x} <br /> <u>Assemblage harmonisé :</u> {.y}")
           } else {
             .x
           }
         })
-      )
-    
-    scorefile_metadata <- catalog_metadata
-    
-    scorefile_metadata <- scorefile_metadata %>%
-      dplyr::select(pgs_id, pgp_id, trait_display, n_variants, genome_build) %>%
-      dplyr::arrange(pgs_id)
-    
-    # Rename columns for better display
-    colnames(scorefile_metadata) <- c("PGS ID", "PGP ID", "Trait", "Variants", "Build")
-    
-    # Render table (static kable for HTML and PDF)
-    knitr::kable(scorefile_metadata, escape = FALSE)
+      ) %>%
+      dplyr::select(pgs_id, pgp_id, trait_display, n_variants, genome_build)
   }
 }
 
-```
-
-
-```{r}
-#| echo: false
-#| eval: false
-#| warning: false
-#| message: false
-#| results: asis
-
-# Build mini-table for custom scores (those without a PGS accession)
-custom_scores <- patient_pgs_list[!pgs_mask]
+# Custom scores (without PGS accession) are explicitly included in this table
+custom_scores <- unique(patient_pgs_list[!grepl("^PGS[0-9]+", patient_pgs_list, ignore.case = TRUE)])
 custom_scores <- custom_scores[!is.na(custom_scores) & custom_scores != ""]
+
+custom_metadata <- tibble::tibble(
+  pgs_id = character(),
+  pgp_id = character(),
+  trait_display = character(),
+  n_variants = character(),
+  genome_build = character()
+)
+
 if (length(custom_scores) > 0) {
-  custom_tbl <- tibble::tibble(
-    Score = custom_scores,
-    Note = "Score personnalisé – consulter la source"
-  )
+  custom_metadata <- tibble::tibble(score_id = custom_scores) %>%
+    left_join(custom_variant_lookup, by = c("score_id" = "PGS")) %>%
+    mutate(
+      pgs_id = paste0(score_id, " (Non publié)"),
+      pgp_id = "Non-publié",
+      trait_display = purrr::map_chr(score_id, ~ {
+        trait <- get_french_trait(.x)
+        if (is.null(trait) || trait == "") .x else trait
+      }),
+      n_variants = ifelse(is.na(n_variants) | n_variants == "", "Non-publié", n_variants),
+      genome_build = "Non-publié"
+    ) %>%
+    select(pgs_id, pgp_id, trait_display, n_variants, genome_build)
 }
 
-if (exists("custom_tbl") && nrow(custom_tbl) > 0) {
-  cat("\n\n### Scores personnalisés\n\n")
-  knitr::kable(custom_tbl, format = "html", escape = FALSE)
+scorefile_metadata <- bind_rows(catalog_metadata, custom_metadata) %>%
+  distinct() %>%
+  arrange(pgs_id, trait_display)
+
+if (nrow(scorefile_metadata) > 0) {
+  colnames(scorefile_metadata) <- c("PGS ID", "PGP ID", "Trait", "N variants", "Build")
+  knitr::kable(scorefile_metadata, escape = FALSE)
 }
+
 ```
 
 ---
 
-## Identifiants du rapport {.unnumbered}
+<!-- ## Identifiants du rapport {.unnumbered}
 
 | Champ | Valeur |
 |-------|--------|
 | **ID-1** | `r params$identifier1` |
-| **ID-2** | `r params$identifier2` |
+| **ID-2** | `r params$identifier2` | -->
