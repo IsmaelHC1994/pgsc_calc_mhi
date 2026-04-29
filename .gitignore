@@ -271,3 +271,4 @@ dev/mhi-reports-bak/tests_allianceCa_run/sample_24-1979/pgs_subset.csv
 dev/mhi-reports-bak/tests_allianceCa_run/sample_24-1979/subset_summaries.csv
 dev/mhi-reports-bak/tests_allianceCa_run/subset_reports/patient_24-1550i_subset_report.html
 dev/mhi-reports-bak/tests_allianceCa_run/subset_reports/patient_24-1979_subset_report.html
+**/**.edtz

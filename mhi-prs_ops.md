@@ -123,7 +123,7 @@ micromamba run -n bioinfo python bin/fill_identifiers.py \
 
 (Install `python-docx` in `bioinfo` once if the script reports that the DOCX footer will not be set.)
 
-The script finds every `patient_<sample_id>_report.docx` and `.html` under the reports directory and replaces `Identifier1` / `Identifier2` with the real values. With `python-docx` installed it also sets a **bottom-right footer** on each page of the DOCX with "ID-1: … · ID-2: …". Use `--dry-run` to preview. If your reports were rendered with real IDs already (e.g. from the CSV at render time), pass the current values as placeholders so the footer gets the right text, e.g. `--placeholder1 "425868" --placeholder2 "16-524"`.
+The script finds every `patient_<sample_id>_report.docx` under the reports directory and replaces `Identifier1` / `Identifier2` with the real values. With `python-docx` installed it also sets a **bottom-right footer** on each page of the DOCX with "ID-1: … · ID-2: …". Use `--dry-run` to preview. If reports were rendered with real IDs already (e.g. from the CSV at render time), pass the current values as placeholders so the footer gets the right text, e.g. `--placeholder1 "425868" --placeholder2 "16-524"`.
 
 **Convert to PDF**: add `--convert-to-pdf` to convert each updated DOCX to PDF in the same directory. Requires LibreOffice installed (`soffice` or `libreoffice` in PATH), e.g. `apt install libreoffice` or use a conda/mamba env that provides it. The script runs `soffice --headless --convert-to pdf --outdir <dir> <docx>`.
 
