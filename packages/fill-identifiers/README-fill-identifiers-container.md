@@ -138,7 +138,6 @@ TRANSFER_DIR="$PWD/packages/fill-identifiers/transfer_package"
 REPORTS_SRC="$PWD/dev/mhi-reports-bak/regenerated_reports"
 ID_CSV="$PWD/packages/fill-identifiers/test_identifiers.csv"
 
-rm -rf "$TRANSFER_DIR"
 mkdir -p "$TRANSFER_DIR/reports"
 
 # Copy all generated DOCX reports while preserving runWGS*/ folder structure.
