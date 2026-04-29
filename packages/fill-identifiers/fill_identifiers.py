@@ -4,7 +4,7 @@ fill_identifiers.py — Batch-fill patient identifiers in generated DOCX reports
 
 Reads a CSV that maps sample IDs to identifier values, then does
 find-and-replace in the matching DOCX report files.
-For DOCX, also sets a bottom-right footer with "ID-1: ... · ID-2: ..."
+For DOCX, sets a bottom-right footer with "ID-1: ... · ID-2: ..."
 (requires python-docx: pip install python-docx). Optionally convert each DOCX to PDF
 with --convert-to-pdf (requires LibreOffice: soffice --headless).
 

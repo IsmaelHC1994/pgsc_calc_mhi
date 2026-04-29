@@ -110,7 +110,7 @@ cd /path/to/mhi-prs/run_pgsc_2_01/bin
 Batch tool: [run_pgsc_2_01/bin/fill_identifiers.py](../run_pgsc_2_01/bin/fill_identifiers.py).
 
 - **Inputs:** CSV with `sample_id`, `identifier1`, `identifier2`; `--reports-dir` pointing at generated reports.
-- **Outputs:** In-place updates to `patient_<sample_id>_report.html` and `.docx`; optional **bottom-right DOCX footer** when `python-docx` is installed; backups under `<reports-dir>/_original_backups/`.
+- **Outputs:** In-place updates to `patient_<sample_id>_report.docx`; optional **bottom-right DOCX footer** when `python-docx` is installed; backups outside the reports directory under `<reports-dir>_original_backups/`.
 - **PDF:** `--convert-to-pdf` converts each updated DOCX to PDF using **LibreOffice** (`soffice --headless`). Pip deps: [requirements-fill-identifiers.txt](../run_pgsc_2_01/bin/requirements-fill-identifiers.txt).
 
 ### Why LibreOffice for DOCX → PDF (not `fpdf2`)
@@ -121,15 +121,16 @@ Batch tool: [run_pgsc_2_01/bin/fill_identifiers.py](../run_pgsc_2_01/bin/fill_id
 
 ## Fill-identifiers container: build and run
 
-Image definition: [Dockerfile.fill-identifiers](../run_pgsc_2_01/bin/Dockerfile.fill-identifiers).  
-Extended examples: [README-fill-identifiers-container.md](../run_pgsc_2_01/bin/README-fill-identifiers-container.md).
+Image definition: [Dockerfile.fill-identifiers](../run_pgsc_2_01/packages/fill-identifiers/Dockerfile.fill-identifiers).  
+Extended examples: [README-fill-identifiers-container.md](../run_pgsc_2_01/packages/fill-identifiers/README-fill-identifiers-container.md).  
+Transfer guide: [HANDOFF-fill-identifiers.md](../run_pgsc_2_01/packages/fill-identifiers/HANDOFF-fill-identifiers.md).
 
 ### 1. Build the image
 
-From `run_pgsc_2_01/bin` (build context must include `fill_identifiers.py` and `requirements-fill-identifiers.txt`):
+From `run_pgsc_2_01/packages/fill-identifiers` (build context must include `fill_identifiers.py` and `requirements-fill-identifiers.txt`):
 
 ```bash
-cd /path/to/mhi-prs/run_pgsc_2_01/bin
+cd /path/to/mhi-prs/run_pgsc_2_01/packages/fill-identifiers
 docker build -f Dockerfile.fill-identifiers -t fill-identifiers:latest .
 ```
 

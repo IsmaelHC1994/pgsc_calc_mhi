@@ -150,24 +150,34 @@ if (is.na(full_patient_id)) {
   stop("Patient ID not found")
 }
 
-# Filter to reference samples + ONLY the specific target patient
-# This ensures percentiles are calculated using only reference + this one patient
-percentile_data <- scores_popsim %>%
-  filter(sampleset == "reference" | IID == full_patient_id)
+# Calculate percentiles against the reference distribution only.
+# ECDF gives the fraction of reference samples with score <= the patient's score.
+reference_percentile_data <- scores_popsim %>%
+  filter(sampleset == "reference")
 
-# Calculate percentiles for each PRS score separately
-# Using only reference + the specific target patient
-percentile_data <- percentile_data %>%
-  group_by(PGS) %>%
-  mutate(Overall_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
-  group_by(PGS, MostSimilarPop) %>%
-  mutate(Population_Percentile = round(percent_rank(Z_MostSimilarPop) * 100, 1)) %>%
-  ungroup()
-
-# Update scores_popsim with correct percentiles for the patient
-# Percentiles are calculated using only reference + this specific patient
-patient_percentiles <- percentile_data %>%
+patient_percentiles <- scores_popsim %>%
   filter(IID == full_patient_id) %>%
+  rowwise() %>%
+  mutate(
+    Overall_Percentile = {
+      current_pgs <- PGS
+      current_score <- Z_MostSimilarPop
+      ref_scores <- reference_percentile_data %>%
+        filter(PGS == current_pgs, !is.na(Z_MostSimilarPop)) %>%
+        pull(Z_MostSimilarPop)
+      if (length(ref_scores) > 0 && !is.na(current_score)) round(ecdf(ref_scores)(current_score) * 100, 1) else NA_real_
+    },
+    Population_Percentile = {
+      current_pgs <- PGS
+      current_pop <- MostSimilarPop
+      current_score <- Z_MostSimilarPop
+      ref_scores <- reference_percentile_data %>%
+        filter(PGS == current_pgs, MostSimilarPop == current_pop, !is.na(Z_MostSimilarPop)) %>%
+        pull(Z_MostSimilarPop)
+      if (length(ref_scores) > 0 && !is.na(current_score)) round(ecdf(ref_scores)(current_score) * 100, 1) else NA_real_
+    }
+  ) %>%
+  ungroup() %>%
   select(IID, PGS, Overall_Percentile, Population_Percentile) %>%
   rename(Overall_Percentile_correct = Overall_Percentile, Population_Percentile_correct = Population_Percentile)
 
@@ -316,9 +326,10 @@ scale_plot <- function(p) {
   )
 }
 
+# Adjust size of elements here for the bell curve
 create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
   # Larger default sizing for sharper, more legible outputs; PDF still scaled down.
-  render_scale <- if (knitr::is_latex_output()) 0.42 else if (knitr::pandoc_to("docx")) 1.25 else 1.5
+  render_scale <- if (knitr::is_latex_output()) 0.42 else if (knitr::pandoc_to("docx")) 1.4 else 1.7
   bs <- round(44 * render_scale)       # theme base_size
   icon_lg <- round(27 * render_scale)  # large icons
   icon_sm <- round(22 * render_scale)
@@ -348,7 +359,16 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
   df_bell <- tibble(x = x_vals, y = y_vals)
   max_y <- max(df_bell$y)
   top_y <- max_y * 1.18
-  patient_x <- qnorm(patient_percentile/100)
+  patient_plot_percentile <- pmin(pmax(patient_percentile, 0.1), 99.9)
+  patient_x <- qnorm(patient_plot_percentile/100)
+  patient_percentile_label <- paste0("Vous (percentile ", round(patient_percentile), ")")
+  section_label_y <- max_y * 0.66
+  section_label_gap <- max_y * 0.045
+  display_pgs_id <- if (!is.null(pgs_id)) {
+    stringr::str_replace(pgs_id, "^(PGS[0-9]+).*", "\\1")
+  } else {
+    "Global"
+  }
   # pastel line color that contrasts with all three panels
   patient_line_color <- "#8B5CF6"  # pastel violet
   
@@ -406,20 +426,10 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
              label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
              size = icon_lg, color = patient_line_color) +
-    # show "Vous" next to the marker line
-    annotate("text", x = patient_x + 0.05, y = max_y*0.97, label = "Vous",
+    # Patient label next to the marker icon
+    annotate("text", x = patient_x + 0.18, y = max_y*1.07, label = patient_percentile_label,
              color = "black", size = lbl, hjust = 0, vjust = 0.5) +
-    
-    # Risk labels - positioned below the icons
-    annotate("text", x = -2.5, y = max_y*0.12, label = "Risque faible", size = lbl_ax) +
-    annotate("text", x = 0, y = max_y*0.12, label = "Risque moyen", size = lbl_ax) +
-    annotate("text", x = 2.5, y = max_y*0.12, label = "Risque élevé", size = lbl_ax) +
-    
-    # Text below the patient marker line - larger text
-    annotate("text", x = qnorm(patient_percentile/100), y = max_y*0.06, 
-             label = paste0("Votre score polygénique est au percentile ", round(patient_percentile)), 
-             color = "black", size = lbl_pct) +
-    
+
     # Prevent top clipping of marker/text while keeping compact layout
     scale_y_continuous(limits = c(0, top_y), expand = expansion(mult = c(0, 0))) +
     
@@ -438,17 +448,26 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
       plot.margin = margin(t = 20, r = 10, b = ifelse(knitr::pandoc_to("docx"), 0, 15), l = 10)
     ) +
     labs(
-      title = paste("Score de risque polygénique :", if(!is.null(pgs_id)) pgs_id else "Global")
+      title = paste("Score de risque polygénique :", display_pgs_id)
     ) +
-    # Labels for risk sections - positioned outside the curve for better visibility
-    annotate("text", x = -2.75, y = max_y*0.65, 
-             label = "Moins d'individus ont un risque réduit", 
+    # Labels for risk sections: two separate text layers keep wrapped lines tight.
+    annotate("text", x = -2.75, y = section_label_y,
+             label = "Moins d'individus",
              size = lbl, color = "#2E2E2E", fontface = "bold") +
-    annotate("text", x = 0, y = max_y*0.65, 
-             label = "La plupart des individus ont un risque moyen", 
+    annotate("text", x = -2.75, y = section_label_y - section_label_gap,
+             label = "ont un risque réduit",
              size = lbl, color = "#2E2E2E", fontface = "bold") +
-    annotate("text", x = 2.75, y = max_y*0.65, 
-             label = "Moins d'individus ont un risque accru", 
+    annotate("text", x = 0, y = section_label_y,
+             label = "La plupart des individus",
+             size = lbl, color = "#2E2E2E", fontface = "bold") +
+    annotate("text", x = 0, y = section_label_y - section_label_gap,
+             label = "ont un risque moyen",
+             size = lbl, color = "#2E2E2E", fontface = "bold") +
+    annotate("text", x = 2.75, y = section_label_y,
+             label = "Moins d'individus",
+             size = lbl, color = "#2E2E2E", fontface = "bold") +
+    annotate("text", x = 2.75, y = section_label_y - section_label_gap,
+             label = "ont un risque accru",
              size = lbl, color = "#2E2E2E", fontface = "bold") +
     # Quantile-based x-axis; keep y scale from earlier (0..0.5)
     scale_x_continuous(
@@ -624,9 +643,10 @@ for (pgs_id in patient_pgs_scores) {
 }
 ``` 
 
-## Résumé de tous les scores de risque polygénique pour le patient <strong>`r params$patient_id`</strong>
+## Résumé de tous les scores de risque polygénique pour le patient
+<!-- ## Résumé de tous les scores de risque polygénique pour le patient <strong>`r params$patient_id`</strong> -->
 
-```{r}
+```{r, results='asis'}
 #| echo: false
 #| warning: false
 #| message: false
@@ -669,13 +689,26 @@ patient_summary_table <- scores_popsim %>%
     "Percentile" = Overall_Percentile
   )
 
-# For HTML output, use kable
-knitr::kable(patient_summary_table, format = "html", digits = 2, align = "c")
+if (knitr::is_html_output()) {
+  print(knitr::kable(patient_summary_table, digits = 2, align = c("l", "l", "r", "r")))
+} else {
+  patient_summary_table %>%
+    mutate(
+      Score = round(Score, 2),
+      Percentile = round(Percentile, 1)
+    ) %>%
+    purrr::pwalk(function(`PGS ID`, Condition, Score, Percentile) {
+      cat("\n\n**Score :** ", `PGS ID`, "\n\n", sep = "")
+      cat("- **Condition :** ", Condition, "\n", sep = "")
+      cat("- **Score standardisé :** ", Score, "\n", sep = "")
+      cat("- **Percentile :** ", Percentile, "\n", sep = "")
+    })
+}
 ```
 
 **Informations supplémentaires sur les scores de risque polygénique:** <br />
 
-```{r, echo=FALSE, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE, results='asis'}
 # Build a compact table restricted to scores used for this patient.
 # Includes Catalog scores (with metadata) and custom scores ("Non-publié").
 
@@ -688,10 +721,19 @@ extract_chr_handle_null <- function(x, field) {
   return(replace(x[[field]], is.null(x[[field]]), ""))
 }
 link_pgscatalog <- function(id, link_type) {
-  if (id != "") stringr::str_glue('<a href="https://www.pgscatalog.org/{link_type}/{id}">{id}</a>') else id
+  if (is.na(id) || id == "") {
+    return("")
+  }
+  is_valid_id <- (link_type == "score" && grepl("^PGS[0-9]+$", id)) ||
+    (link_type == "publication" && grepl("^PGP[0-9]+$", id))
+  if (is_valid_id) {
+    stringr::str_glue('<a href="https://www.pgscatalog.org/{link_type}/{id}">{id}</a>')
+  } else {
+    id
+  }
 }
 add_note <- function(id, note) {
-  if (id != "" && note != "") {
+  if (!is.na(id) && id != "" && !is.na(note) && note != "") {
     return(stringr::str_glue("{id} <br /> <small>{note}</small>"))
   } else {
     return(id)
@@ -757,17 +799,6 @@ if (!is.null(pgs_metadata)) {
       genome_build = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "genome_build")),
       harmonised_build = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "HmPOS_build"))
     ) %>%
-      dplyr::mutate(
-        pgs_id = purrr::map2_chr(pgs_id, pgs_name, ~ add_note(link_pgscatalog(.x, "score"), .y)),
-        pgp_id = purrr::map2_chr(pgp_id, citation, ~ add_note(link_pgscatalog(.x, "publication"), .y)),
-        genome_build = purrr::map2_chr(genome_build, harmonised_build, ~ {
-          if (.y != "") {
-            stringr::str_glue("<u>Assemblage d'origine :</u> {.x} <br /> <u>Assemblage harmonisé :</u> {.y}")
-          } else {
-            .x
-          }
-        })
-      ) %>%
       dplyr::select(pgs_id, pgp_id, trait_display, n_variants, genome_build)
   }
 }
@@ -804,9 +835,74 @@ scorefile_metadata <- bind_rows(catalog_metadata, custom_metadata) %>%
   distinct() %>%
   arrange(pgs_id, trait_display)
 
+for (missing_col in c("pgs_name", "citation", "harmonised_build")) {
+  if (!missing_col %in% names(scorefile_metadata)) {
+    scorefile_metadata[[missing_col]] <- ""
+  }
+}
+
+if (knitr::is_html_output()) {
+  scorefile_metadata <- scorefile_metadata %>%
+    mutate(
+      pgs_id = purrr::map2_chr(pgs_id, pgs_name, ~ add_note(link_pgscatalog(.x, "score"), .y)),
+      pgp_id = purrr::map2_chr(pgp_id, citation, ~ add_note(link_pgscatalog(.x, "publication"), .y)),
+      genome_build = purrr::pmap_chr(
+        list(genome_build, harmonised_build),
+        function(genome_build, harmonised_build) {
+          if (!is.na(harmonised_build) && harmonised_build != "") {
+            stringr::str_glue("<u>Orig. :</u> {genome_build} <br /> <u>Harm. :</u> {harmonised_build}")
+          } else {
+            genome_build
+          }
+        }
+      )
+    )
+} else {
+  scorefile_metadata <- scorefile_metadata %>%
+    mutate(
+      pgs_id = ifelse(
+        grepl("^PGS[0-9]+$", pgs_id),
+        stringr::str_glue("[{pgs_id}](https://www.pgscatalog.org/score/{pgs_id})"),
+        pgs_id
+      ),
+      pgp_id = ifelse(
+        grepl("^PGP[0-9]+$", pgp_id),
+        stringr::str_glue("[{pgp_id}](https://www.pgscatalog.org/publication/{pgp_id})"),
+        pgp_id
+      ),
+      trait_display = stringr::str_replace_all(trait_display, "<br\\s*/?>", "; "),
+      trait_display = stringr::str_replace_all(trait_display, "<[^>]+>", ""),
+      n_variants = as.character(n_variants),
+      genome_build = purrr::pmap_chr(
+        list(genome_build, harmonised_build),
+        function(genome_build, harmonised_build) {
+          if (!is.na(harmonised_build) && harmonised_build != "") {
+            stringr::str_glue("Assemblage d'origine: {genome_build}; assemblage harmonisé: {harmonised_build}")
+          } else {
+            as.character(genome_build)
+          }
+        }
+      )
+    )
+}
+
 if (nrow(scorefile_metadata) > 0) {
-  colnames(scorefile_metadata) <- c("PGS ID", "PGP ID", "Trait", "N variants", "Build")
-  knitr::kable(scorefile_metadata, escape = FALSE)
+  if (knitr::is_html_output()) {
+    scorefile_metadata <- scorefile_metadata %>%
+      select(pgs_id, pgp_id, trait_display, n_variants, genome_build)
+    colnames(scorefile_metadata) <- c("PGS", "PGP", "Trait", "N", "Build")
+    print(knitr::kable(scorefile_metadata, escape = FALSE, align = c("l", "l", "l", "r", "l")))
+  } else {
+    scorefile_metadata %>%
+      select(pgs_id, pgp_id, trait_display, n_variants, genome_build) %>%
+      purrr::pwalk(function(pgs_id, pgp_id, trait_display, n_variants, genome_build) {
+        cat("\n\n**Score :** ", pgs_id, "\n\n", sep = "")
+        cat("- **Publication :** ", pgp_id, "\n", sep = "")
+        cat("- **Trait :** ", trait_display, "\n", sep = "")
+        cat("- **Nombre de variants :** ", n_variants, "\n", sep = "")
+        cat("- **Assemblage :** ", genome_build, "\n", sep = "")
+      })
+  }
 }
 
 ```

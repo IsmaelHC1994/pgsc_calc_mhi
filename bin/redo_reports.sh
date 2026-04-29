@@ -14,8 +14,6 @@ DEV_DIR="${DEV_DIR:-$PROJECT_ROOT/dev}"
 INPUT_DIR="${INPUT_DIR:-$DEV_DIR/mhi-reports-bak/ica_results}"
 OUTPUT_DIR="${OUTPUT_DIR:-$DEV_DIR/mhi-reports-bak/regenerated_reports}"
 TEMPLATE_FILE="${TEMPLATE_FILE:-$SCRIPT_DIR/patient_report_template_filtered.qmd}"
-# TEMPLATE_FILE="${TEMPLATE_FILE:-$DEV_DIR/patient_report_template.qmd}"
-# TEMPLATE_FILE="${TEMPLATE_FILE:-$DEV_DIR/patient_report_template_mhi_prs_debug.qmd}"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-docker.io/ismaelhc94/pgsc-mhi-report:dev}"
 USE_DOCKER="${USE_DOCKER:-true}"
 INDICATION_CSV="${INDICATION_CSV:-$DEV_DIR/corr_55samples_formatted.txt}"
@@ -24,6 +22,11 @@ INDICATION_CSV="${INDICATION_CSV:-$DEV_DIR/corr_55samples_formatted.txt}"
 # PDF requires LaTeX in the environment. DOCX needs only Pandoc (bundled with Quarto).
 # The PDF format block is kept in the template but not rendered by default.
 OUTPUT_FORMAT="${OUTPUT_FORMAT:-html,docx}"
+
+# Keep ID placeholders in regenerated reports by default.
+# The fill-identifiers container/script replaces these later and adds DOCX footers.
+# Set PREFILL_IDENTIFIERS=true to restore the older behavior (Dossier/sample or identifier columns from CSV).
+PREFILL_IDENTIFIERS="${PREFILL_IDENTIFIERS:-false}"
 
 # Process only the first sample by default. Override via env or CLI: --test_one=false to process all.
 TEST_ONE="${TEST_ONE:-true}"
@@ -255,19 +258,24 @@ for run_dir in "$INPUT_DIR"/runWGS*; do
         fi
 
         # Identifiers for report header/footer.
-        # Priority: 1) identifier1/identifier2 columns in CSV, 2) Dossier/sample_id fallback
-        identifier1=$(get_csv_column_for_sample "$sample_id" "$INDICATION_CSV" "identifier1")
-        if [ -z "$identifier1" ]; then
-            identifier1=$(get_dossier_for_sample "$sample_id" "$INDICATION_CSV")
+        # Default: keep placeholders so fill_identifiers.py can fill IDs and add DOCX footers later.
+        identifier1="Identifier1"
+        identifier2="Identifier2"
+        if [ "$PREFILL_IDENTIFIERS" = "true" ]; then
+            # Optional old behavior. Priority: 1) identifier1/identifier2 columns in CSV, 2) Dossier/sample_id fallback
+            identifier1=$(get_csv_column_for_sample "$sample_id" "$INDICATION_CSV" "identifier1")
+            if [ -z "$identifier1" ]; then
+                identifier1=$(get_dossier_for_sample "$sample_id" "$INDICATION_CSV")
+            fi
+            if [ -z "$identifier1" ]; then
+                identifier1="Identifier1"
+            fi
+            identifier2=$(get_csv_column_for_sample "$sample_id" "$INDICATION_CSV" "identifier2")
+            if [ -z "$identifier2" ]; then
+                identifier2="$sample_id"
+            fi
         fi
-        if [ -z "$identifier1" ]; then
-            identifier1="Identifier1"
-        fi
-        identifier2=$(get_csv_column_for_sample "$sample_id" "$INDICATION_CSV" "identifier2")
-        if [ -z "$identifier2" ]; then
-            identifier2="$sample_id"
-        fi
-        echo "    Identifiers: ID-1=$identifier1, ID-2=$identifier2"
+        echo "    Identifiers in report: ID-1=$identifier1, ID-2=$identifier2"
 
         # Create temporary work directory for this sample
         work_dir=$(mktemp -d)

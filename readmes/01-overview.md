@@ -43,7 +43,7 @@ See [02 – PGScalc](02-pgscalc.md) for inputs, outputs, and reference documenta
 
 ## Documentation map
 
-- **[README](README.md)** – This index and quick links.
+- **[README](mhi-prs/run_pgsc_2_01/readmes/README.md)** – This index and quick links.
 - **[01 – Overview](01-overview.md)** – This file.
 - **[02 – PGScalc](02-pgscalc.md)** – PGS Catalog Calculator.
 - **[03 – gVCF and multisample VCF](03-gvcf-multisample.md)** – gVCF processing and multisample merge.

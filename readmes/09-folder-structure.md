@@ -8,7 +8,7 @@ Layout of the MHI-PRS project and the main pipeline directory `run_pgsc_2_01`.
 
 | Path | Role |
 |------|------|
-| **readmes/** | This documentation set ([README](README.md), [01–09](01-overview.md)). |
+| **readmes/** | This documentation set ([README](mhi-prs/run_pgsc_2_01/readmes/README.md), [01–09](01-overview.md)). |
 | **run_pgsc_2_01/** | Main pipeline: Nextflow workflows, modules, config, report assets. |
 | **test_mapping.csv** (if present) | Example sample–PGS mapping for testing. |
 
