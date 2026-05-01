@@ -52,6 +52,15 @@ Implications:
 - **PDF**: Optional. Enable with `OUTPUT_FORMAT=html,pdf` or `OUTPUT_FORMAT=html,docx,pdf`. Requires LaTeX in the environment. Bell-curve figures use scaled-down fonts/icons for PDF (`pdf_scale` in `create_bell_curve_purple_viz`).
 - **Converting HTML to DOCX** (without re-rendering): `pandoc report.html -o report.docx`.
 
+## Report PGS defaults
+
+- **HCM/CMH default**: regenerated clinical-facing reports use only the published PGS Catalog score `PGS004911`.
+- **Archived custom HCM score**: `HaydarlouHCM` remains supported by the template and subset logic, but is disabled by default to avoid confusion between published and non-published HCM scores.
+- **Internal comparison**: set `INCLUDE_CUSTOM_HCM=true` when running `redo_reports.sh` to include both `HaydarlouHCM` and `PGS004911`.
+- **Mappings**: active `sample_mapping.csv` uses only PGS Catalog scores; `sample_mapping_with_custom_hcm_archived.csv` preserves the old custom-HCM mapping.
+
+The bell-curve plot uses a single purple gradient for print readability, colorblind-friendliness, and to avoid red = bad connotations. The overall size of plot subelements is controlled by `plot_element_scale` in `create_bell_curve_purple_viz()`.
+
 **PDF LaTeX header (code wrapping):** If the PDF build shows long verbatim lines overflowing, add under `format.pdf`:
 
 ```yaml

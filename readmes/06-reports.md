@@ -105,6 +105,30 @@ cd /path/to/mhi-prs/run_pgsc_2_01/bin
 # or: TEST_ONE=false ./redo_reports.sh
 ```
 
+### Default reported PGS set
+
+For clinical-facing regenerated reports, HCM now reports only the published PGS Catalog score:
+
+- `CMH`: `PGS004911`
+- `CMD`: `PGS004862`
+- `Brugada`: `PGS001779`
+- `SQTL`: `PGS002276`
+- `AF`: `PGS005168`
+
+The previous custom HCM score (`HaydarlouHCM`) is intentionally disabled by default to avoid mixing a non-published score with the published PGS Catalog HCM score in the same report, even if the custom score appeared to perform better in internal testing. The custom-score functionality is still kept in the template and subset-generation logic for internal review or future reactivation.
+
+To re-enable the archived custom HCM score for internal comparison only:
+
+```bash
+INCLUDE_CUSTOM_HCM=true ./redo_reports.sh
+```
+
+The archived sample mapping that includes `HaydarlouHCM` is kept at `run_pgsc_2_01/sample_mapping_with_custom_hcm_archived.csv`. The active `sample_mapping.csv` uses only PGS Catalog scores.
+
+### Plot design note
+
+The bell-curve plot uses a single-hue purple gradient instead of green/yellow/red. This was chosen for printing, to be more suitable for colorblind readers, and to avoid the visual implication that red means "bad." The gradient still moves from lighter purple on the lower-risk side to darker purple on the higher-risk side. Global sizing of plot subelements is controlled in `create_bell_curve_purple_viz()` with `plot_element_scale`.
+
 ### `fill_identifiers.py`
 
 Batch tool: [run_pgsc_2_01/bin/fill_identifiers.py](../run_pgsc_2_01/bin/fill_identifiers.py).

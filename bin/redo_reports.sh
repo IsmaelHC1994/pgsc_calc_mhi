@@ -28,6 +28,11 @@ OUTPUT_FORMAT="${OUTPUT_FORMAT:-html,docx}"
 # Set PREFILL_IDENTIFIERS=true to restore the older behavior (Dossier/sample or identifier columns from CSV).
 PREFILL_IDENTIFIERS="${PREFILL_IDENTIFIERS:-false}"
 
+# Default HCM reports use only the published PGS Catalog score to avoid mixing
+# published and non-published HCM scores in the same clinical-facing report.
+# The custom-score path is retained and can be re-enabled for internal review.
+INCLUDE_CUSTOM_HCM="${INCLUDE_CUSTOM_HCM:-false}"
+
 # Process only the first sample by default. Override via env or CLI: --test_one=false to process all.
 TEST_ONE="${TEST_ONE:-true}"
 for arg in "$@"; do
@@ -43,7 +48,11 @@ get_pgs_ids_for_indication() {
     local indication="$1"
     case "$indication" in
         CMH)
-            echo "HaydarlouHCM,PGS004911"
+            if [ "$INCLUDE_CUSTOM_HCM" = "true" ]; then
+                echo "HaydarlouHCM,PGS004911"
+            else
+                echo "PGS004911"
+            fi
             ;;
         CMD)
             echo "PGS004862"
@@ -279,7 +288,7 @@ for run_dir in "$INPUT_DIR"/runWGS*; do
 
         # Create temporary work directory for this sample
         work_dir=$(mktemp -d)
-        trap "rm -rf $work_dir" RETURN
+        trap 'rm -rf "$work_dir"' RETURN
         
         # Copy files to work directory
         cp "$TEMPLATE_FILE" "$work_dir/working_patient_report_template.qmd"
@@ -420,7 +429,7 @@ master_csv="$OUTPUT_DIR/all_patients_pgs_subset.csv"
 if [ "$USE_DOCKER" = "true" ]; then
     # Use Docker to combine CSVs
     temp_combine_dir=$(mktemp -d)
-    trap "rm -rf $temp_combine_dir" RETURN
+    trap 'rm -rf "$temp_combine_dir"' RETURN
     
     # Copy all individual CSVs to temp directory
     find "$OUTPUT_DIR" -name "patient_*_pgs_subset.csv" -type f -exec cp {} "$temp_combine_dir/" \;

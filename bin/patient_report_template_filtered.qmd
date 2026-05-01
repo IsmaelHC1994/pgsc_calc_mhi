@@ -92,16 +92,15 @@ report_date <- format(Sys.Date(), "%Y-%m-%d")
 
 # Generate a fixed risk-direction image for non-HTML outputs (especially Word)
 risk_arrow_image <- "risk_scale_arrow.png"
-if (!file.exists(risk_arrow_image)) {
-  grDevices::png(risk_arrow_image, width = 1800, height = 180, bg = "white", res = 220)
-  par(mar = c(0, 0, 0, 0))
-  plot.new()
-  plot.window(xlim = c(0, 1), ylim = c(0, 1))
-  text(0.10, 0.55, "Risque plus faible", cex = 1.9, font = 2, xpd = NA)
-  text(0.90, 0.55, "Risque plus eleve", cex = 1.9, font = 2, xpd = NA)
-  arrows(0.24, 0.55, 0.76, 0.55, code = 3, angle = 20, length = 0.08, lwd = 6, col = "#333333")
-  dev.off()
-}
+risk_arrow_text_cex <- 2.35
+grDevices::png(risk_arrow_image, width = 1800, height = 180, bg = "white", res = 220)
+par(mar = c(0, 0, 0, 0))
+plot.new()
+plot.window(xlim = c(0, 1), ylim = c(0, 1))
+text(0.10, 0.55, "Risque plus faible", cex = risk_arrow_text_cex, font = 2, xpd = NA)
+text(0.90, 0.55, "Risque plus eleve", cex = risk_arrow_text_cex, font = 2, xpd = NA)
+arrows(0.24, 0.55, 0.76, 0.55, code = 3, angle = 20, length = 0.08, lwd = 6, col = "#333333")
+dev.off()
 
 
 ```
@@ -329,7 +328,9 @@ scale_plot <- function(p) {
 # Adjust size of elements here for the bell curve
 create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
   # Larger default sizing for sharper, more legible outputs; PDF still scaled down.
-  render_scale <- if (knitr::is_latex_output()) 0.42 else if (knitr::pandoc_to("docx")) 1.4 else 1.7
+  plot_element_scale <- 1.4  # Adjusts all plot subelements together: text, icons, and line widths.
+  base_render_scale <- if (knitr::is_latex_output()) 0.42 else if (knitr::pandoc_to("docx")) 1.4 else 1.7
+  render_scale <- base_render_scale * plot_element_scale
   bs <- round(44 * render_scale)       # theme base_size
   icon_lg <- round(27 * render_scale)  # large icons
   icon_sm <- round(22 * render_scale)
@@ -338,7 +339,7 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
   lbl_pct <- round(18 * render_scale)  # percentile text
   tit <- round(52 * render_scale)      # plot title
   seg_sz <- 3.0 * render_scale         # segment/line widths
-  # Purple-to-red gradient version
+  # Single-hue purple gradient for print/colorblind accessibility and to avoid red = bad connotations.
   filtered_data <- if (!is.null(pgs_id)) {
     scores_popsim %>% dplyr::filter(PGS == pgs_id)
   } else {
@@ -361,7 +362,7 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
   top_y <- max_y * 1.18
   patient_plot_percentile <- pmin(pmax(patient_percentile, 0.1), 99.9)
   patient_x <- qnorm(patient_plot_percentile/100)
-  patient_percentile_label <- paste0("Vous (percentile ", round(patient_percentile), ")")
+  patient_percentile_label <- paste0("Le résultat du patient (percentile ", round(patient_percentile), ")")
   section_label_y <- max_y * 0.66
   section_label_gap <- max_y * 0.045
   display_pgs_id <- if (!is.null(pgs_id)) {
@@ -384,7 +385,7 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
     scale_color_gradientn(
       colours = c(
         "#F9F4FC",  # lightest purple - far left (low risk)
-        "#F9F4FC",  # very light purple
+        # "#F9F4FC",  # very light purple
         "#EEE0F7",  # light purple
         "#E5D4F3",  # still light (middle point)
         "#AB47BC",  # light-medium purple (just after middle, still not dark)
@@ -419,7 +420,7 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
     # High risk (right) - use dark color
     annotate("text", x = 2.5, y = max_y*0.25, label = if(use_fontawesome) "\uf007" else "●", 
              family = if(use_fontawesome) "FontAwesome" else "sans",
-             size = icon_lg, color = "#7B1FA2") +  # dark purple - high risk
+             size = icon_lg, color = "#6E1B9A") +  # dark purple - higher risk
     
     # Patient marker icon - positioned at bell curve height
     annotate("text", x = patient_x, y = max_y * 1.03, 
@@ -623,7 +624,7 @@ for (pgs_id in patient_pgs_scores) {
 
   # Add risk direction text with output-specific rendering.
   if (knitr::is_html_output()) {
-    cat('<div style="display: flex; align-items: center; justify-content: space-between; font-size: 18px; margin-top: -20px; margin-bottom: 20px; width: 100%; padding: 0 2%;">')
+    cat('<div style="display: flex; align-items: center; justify-content: space-between; font-size: 24px; margin-top: -20px; margin-bottom: 20px; width: 100%; padding: 0 2%;">')
     cat('<span style="white-space: nowrap;"><strong>Risque plus faible</strong></span>')
     cat('<span style="flex: 1; height: 3px; background-color: #333; margin: 0 20px; position: relative;">')
     cat('<span style="position: absolute; left: -6px; top: -4px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-right: 6px solid #333;"></span>')
