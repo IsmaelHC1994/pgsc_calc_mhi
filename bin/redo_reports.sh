@@ -17,6 +17,7 @@ TEMPLATE_FILE="${TEMPLATE_FILE:-$SCRIPT_DIR/patient_report_template_filtered.qmd
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-docker.io/ismaelhc94/pgsc-mhi-report:dev}"
 USE_DOCKER="${USE_DOCKER:-true}"
 INDICATION_CSV="${INDICATION_CSV:-$DEV_DIR/corr_55samples_formatted.txt}"
+PGS_MATRIX_XLSX="${PGS_MATRIX_XLSX:-$PROJECT_ROOT/assets/report/corr_55samples_formatted_RT.xlsx}"
 
 # Output format(s): html, docx, pdf, or combinations like "html,docx" (default).
 # PDF requires LaTeX in the environment. DOCX needs only Pandoc (bundled with Quarto).
@@ -180,6 +181,121 @@ get_csv_column_for_sample() {
     ' "$csv_file" | head -1
 }
 
+# Build a per-sample PGS selection cache from the 2nd sheet of the Excel matrix.
+# The cache format is: sample_id<TAB>comma_separated_pgs_ids
+build_pgs_selection_cache_from_xlsx() {
+    local xlsx_file="$1"
+    local cache_file="$2"
+    local include_custom_hcm="$3"
+    python3 - "$xlsx_file" "$cache_file" "$include_custom_hcm" <<'PY'
+import csv
+import re
+import sys
+import zipfile
+import xml.etree.ElementTree as ET
+
+xlsx_path, cache_path, include_custom = sys.argv[1], sys.argv[2], sys.argv[3].lower() == "true"
+ns = {
+    "m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+    "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+}
+
+def parse_shared_strings(zf):
+    if "xl/sharedStrings.xml" not in zf.namelist():
+        return []
+    root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
+    out = []
+    for si in root.findall("m:si", ns):
+        out.append("".join((t.text or "") for t in si.findall(".//m:t", ns)))
+    return out
+
+def cell_value(cell, shared_strings):
+    ctype = cell.attrib.get("t")
+    v = cell.find("m:v", ns)
+    if v is None:
+        return ""
+    txt = (v.text or "").strip()
+    if ctype == "s":
+        return shared_strings[int(txt)] if txt.isdigit() and int(txt) < len(shared_strings) else ""
+    return txt
+
+def col_from_ref(ref):
+    return re.sub(r"\d", "", ref or "")
+
+def pgs_id_from_header(header):
+    header = (header or "").strip()
+    m = re.search(r"(PGS\d+)", header)
+    if m:
+        return m.group(1)
+    if "HaydarlouHCM" in header:
+        return "HaydarlouHCM"
+    return None
+
+with zipfile.ZipFile(xlsx_path) as zf:
+    wb = ET.fromstring(zf.read("xl/workbook.xml"))
+    sheets = wb.find("m:sheets", ns)
+    if sheets is None or len(sheets) < 2:
+        raise RuntimeError("Workbook does not contain a second sheet for sample PGS mapping.")
+    second = sheets[1]
+    rid = second.attrib.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+    rels = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
+    rel_map = {r.attrib.get("Id"): r.attrib.get("Target") for r in rels}
+    target = rel_map.get(rid)
+    if not target:
+        raise RuntimeError("Could not resolve second-sheet relationship target.")
+    sheet_xml = "xl/" + target.lstrip("/")
+    shared = parse_shared_strings(zf)
+    sheet = ET.fromstring(zf.read(sheet_xml))
+    rows = sheet.findall(".//m:sheetData/m:row", ns)
+    if not rows:
+        raise RuntimeError("Second sheet is empty.")
+
+    header_cells = rows[0].findall("m:c", ns)
+    header_map = {col_from_ref(c.attrib.get("r", "")): cell_value(c, shared).strip() for c in header_cells}
+
+    sample_col = None
+    pgs_cols = []
+    for col, name in header_map.items():
+        if name == "#LDM":
+            sample_col = col
+            continue
+        pgs = pgs_id_from_header(name)
+        if pgs:
+            pgs_cols.append((col, pgs))
+    if sample_col is None:
+        raise RuntimeError("Second sheet does not contain '#LDM' column.")
+
+    with open(cache_path, "w", newline="", encoding="utf-8") as out_f:
+        writer = csv.writer(out_f, delimiter="\t")
+        for row in rows[1:]:
+            row_vals = {}
+            for c in row.findall("m:c", ns):
+                row_vals[col_from_ref(c.attrib.get("r", ""))] = cell_value(c, shared).strip()
+            sample_id = (row_vals.get(sample_col, "") or "").strip()
+            if not sample_id:
+                continue
+            selected = []
+            for col, pgs in pgs_cols:
+                val = (row_vals.get(col, "") or "").strip().lower()
+                if val == "x":
+                    if pgs == "HaydarlouHCM" and not include_custom:
+                        continue
+                    selected.append(pgs)
+            if selected:
+                writer.writerow([sample_id, ",".join(selected)])
+PY
+}
+
+get_pgs_ids_for_sample_from_cache() {
+    local sample_id="$1"
+    local cache_file="$2"
+    if [ ! -f "$cache_file" ]; then
+        echo ""
+        return
+    fi
+    awk -F'\t' -v sample="$sample_id" '$1 == sample { print $2; exit }' "$cache_file"
+}
+
 # Colors for output
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -202,8 +318,23 @@ echo "Output directory: $OUTPUT_DIR"
 echo "Template: $TEMPLATE_FILE"
 echo "Output format(s): $OUTPUT_FORMAT"
 echo "Testing One Sample?: $TEST_ONE"
+echo "PGS matrix XLSX: $PGS_MATRIX_XLSX"
 echo "=========================================="
 echo
+
+pgs_selection_cache="$(mktemp)"
+if [ -f "$PGS_MATRIX_XLSX" ]; then
+    echo "Building per-sample PGS mapping cache from Excel sheet 2..."
+    if build_pgs_selection_cache_from_xlsx "$PGS_MATRIX_XLSX" "$pgs_selection_cache" "$INCLUDE_CUSTOM_HCM"; then
+        echo "  ✓ Loaded sample-specific PGS selection from XLSX"
+    else
+        echo -e "${YELLOW}  ! Failed to parse XLSX mapping, falling back to indication-based mapping${NC}"
+        : > "$pgs_selection_cache"
+    fi
+else
+    echo -e "${YELLOW}  ! XLSX mapping not found, falling back to indication-based mapping${NC}"
+    : > "$pgs_selection_cache"
+fi
 
 # Find all run directories
 for run_dir in "$INPUT_DIR"/runWGS*; do
@@ -258,8 +389,12 @@ for run_dir in "$INPUT_DIR"/runWGS*; do
             echo "    No indication found, showing all scores"
         fi
         
-        # Get PGS IDs to include based on indication
-        allowed_pgs_ids=$(get_pgs_ids_for_indication "$indication")
+        # Prefer per-sample mapping from XLSX sheet 2 (#LDM + x-marked PGS columns).
+        # Fall back to legacy indication mapping if sample is not present in XLSX mapping.
+        allowed_pgs_ids=$(get_pgs_ids_for_sample_from_cache "$sample_id" "$pgs_selection_cache")
+        if [ -z "$allowed_pgs_ids" ]; then
+            allowed_pgs_ids=$(get_pgs_ids_for_indication "$indication")
+        fi
         if [ "$allowed_pgs_ids" = "all" ]; then
             echo "    Including all PGS scores"
         else
@@ -419,6 +554,8 @@ EOF
         break
     fi
 done
+
+rm -f "$pgs_selection_cache"
 
 # Combine all individual PGS subset CSVs into a single master CSV
 echo
