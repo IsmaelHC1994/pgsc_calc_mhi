@@ -644,14 +644,15 @@ for (pgs_id in patient_pgs_scores) {
 }
 ``` 
 
-## Résumé de tous les scores de risque polygénique pour le patient
-<!-- ## Résumé de tous les scores de risque polygénique pour le patient <strong>`r params$patient_id`</strong> -->
+## Résumé et informations sur les scores de risque polygénique pour le patient
 
 ```{r, results='asis'}
 #| echo: false
 #| warning: false
 #| message: false
 #| label: table-summary-prs
+
+# Per-score summary (values) + catalogue / custom metadata in one unified block.
 
 # Display summary of all PRS scores for this patient
 # Filter to only include scores in patient_pgs_list (which may have been filtered by allowed_pgs_ids)
@@ -690,28 +691,16 @@ patient_summary_table <- scores_popsim %>%
     "Percentile" = Overall_Percentile
   )
 
-if (knitr::is_html_output()) {
-  print(knitr::kable(patient_summary_table, digits = 2, align = c("l", "l", "r", "r")))
-} else {
-  patient_summary_table %>%
-    mutate(
-      Score = round(Score, 2),
-      Percentile = round(Percentile, 1)
-    ) %>%
-    purrr::pwalk(function(`PGS ID`, Condition, Score, Percentile) {
-      cat("\n\n**Score :** ", `PGS ID`, "\n\n", sep = "")
-      cat("- **Condition :** ", Condition, "\n", sep = "")
-      cat("- **Score standardisé :** ", Score, "\n", sep = "")
-      cat("- **Percentile :** ", Percentile, "\n", sep = "")
+patient_summary_table <- patient_summary_table %>%
+  mutate(
+    .merge_key = purrr::map_chr(`PGS ID`, function(pid) {
+      if (grepl("^PGS[0-9]+", pid, ignore.case = TRUE)) {
+        sub("^(PGS[0-9]+).*$", "\\1", pid, ignore.case = TRUE)
+      } else {
+        sub("^([^_]+).*$", "\\1", pid)
+      }
     })
-}
-```
-
-**Informations supplémentaires sur les scores de risque polygénique:** <br />
-
-```{r, echo=FALSE, warning=FALSE, results='asis'}
-# Build a compact table restricted to scores used for this patient.
-# Includes Catalog scores (with metadata) and custom scores ("Non-publié").
+  )
 
 # Keep only true PGS accessions (e.g., PGS005168) used by this patient
 patient_base_ids <- unique(stringr::str_extract(patient_pgs_list, "^(PGS[0-9]+)"))
@@ -774,10 +763,13 @@ custom_variant_lookup <- if (length(variant_count_cols) > 0) {
 
 catalog_metadata <- tibble::tibble(
   pgs_id = character(),
+  pgs_name = character(),
+  citation = character(),
   pgp_id = character(),
   trait_display = character(),
   n_variants = character(),
-  genome_build = character()
+  genome_build = character(),
+  harmonised_build = character()
 )
 
 if (!is.null(pgs_metadata)) {
@@ -800,7 +792,7 @@ if (!is.null(pgs_metadata)) {
       genome_build = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "genome_build")),
       harmonised_build = purrr::map_chr(json_list_patient, ~ extract_chr_handle_null(.x$header, "HmPOS_build"))
     ) %>%
-      dplyr::select(pgs_id, pgp_id, trait_display, n_variants, genome_build)
+      dplyr::select(pgs_id, pgs_name, citation, pgp_id, trait_display, n_variants, genome_build, harmonised_build)
   }
 }
 
@@ -810,10 +802,13 @@ custom_scores <- custom_scores[!is.na(custom_scores) & custom_scores != ""]
 
 custom_metadata <- tibble::tibble(
   pgs_id = character(),
+  pgs_name = character(),
+  citation = character(),
   pgp_id = character(),
   trait_display = character(),
   n_variants = character(),
-  genome_build = character()
+  genome_build = character(),
+  harmonised_build = character()
 )
 
 if (length(custom_scores) > 0) {
@@ -821,31 +816,64 @@ if (length(custom_scores) > 0) {
     left_join(custom_variant_lookup, by = c("score_id" = "PGS")) %>%
     mutate(
       pgs_id = paste0(score_id, " (Non publié)"),
+      pgs_name = "",
+      citation = "",
       pgp_id = "Non-publié",
       trait_display = purrr::map_chr(score_id, ~ {
         trait <- get_french_trait(.x)
         if (is.null(trait) || trait == "") .x else trait
       }),
       n_variants = ifelse(is.na(n_variants) | n_variants == "", "Non-publié", n_variants),
-      genome_build = "Non-publié"
+      genome_build = "Non-publié",
+      harmonised_build = ""
     ) %>%
-    select(pgs_id, pgp_id, trait_display, n_variants, genome_build)
+    select(pgs_id, pgs_name, citation, pgp_id, trait_display, n_variants, genome_build, harmonised_build)
 }
 
 scorefile_metadata <- bind_rows(catalog_metadata, custom_metadata) %>%
   distinct() %>%
-  arrange(pgs_id, trait_display)
+  arrange(pgs_id, trait_display) %>%
+  mutate(
+    .merge_key = purrr::map_chr(pgs_id, function(pid) {
+      if (grepl("^PGS[0-9]+", pid)) {
+        sub("^(PGS[0-9]+).*$", "\\1", pid)
+      } else if (grepl("\\(Non publié\\)$", pid)) {
+        trimws(sub("\\s*\\(Non publié\\)$", "", pid))
+      } else {
+        pid
+      }
+    })
+  )
+
+scorefile_meta_unique <- scorefile_metadata %>%
+  dplyr::group_by(.merge_key) %>%
+  dplyr::slice_head(n = 1) %>%
+  dplyr::ungroup()
 
 for (missing_col in c("pgs_name", "citation", "harmonised_build")) {
-  if (!missing_col %in% names(scorefile_metadata)) {
-    scorefile_metadata[[missing_col]] <- ""
+  if (!missing_col %in% names(scorefile_meta_unique)) {
+    scorefile_meta_unique[[missing_col]] <- ""
   }
 }
 
+merged_scores <- patient_summary_table %>%
+  dplyr::left_join(
+    dplyr::select(
+      scorefile_meta_unique,
+      dplyr::all_of(c(".merge_key", "pgs_name", "citation", "pgp_id", "trait_display", "n_variants", "genome_build", "harmonised_build"))
+    ),
+    by = ".merge_key"
+  ) %>%
+  dplyr::mutate(
+    dplyr::across(
+      c(Condition, pgs_name, citation, pgp_id, trait_display, n_variants, genome_build, harmonised_build),
+      ~ dplyr::coalesce(as.character(.x), "")
+    )
+  )
+
 if (knitr::is_html_output()) {
-  scorefile_metadata <- scorefile_metadata %>%
+  merged_scores <- merged_scores %>%
     mutate(
-      pgs_id = purrr::map2_chr(pgs_id, pgs_name, ~ add_note(link_pgscatalog(.x, "score"), .y)),
       pgp_id = purrr::map2_chr(pgp_id, citation, ~ add_note(link_pgscatalog(.x, "publication"), .y)),
       genome_build = purrr::pmap_chr(
         list(genome_build, harmonised_build),
@@ -859,13 +887,8 @@ if (knitr::is_html_output()) {
       )
     )
 } else {
-  scorefile_metadata <- scorefile_metadata %>%
+  merged_scores <- merged_scores %>%
     mutate(
-      pgs_id = ifelse(
-        grepl("^PGS[0-9]+$", pgs_id),
-        stringr::str_glue("[{pgs_id}](https://www.pgscatalog.org/score/{pgs_id})"),
-        pgs_id
-      ),
       pgp_id = ifelse(
         grepl("^PGP[0-9]+$", pgp_id),
         stringr::str_glue("[{pgp_id}](https://www.pgscatalog.org/publication/{pgp_id})"),
@@ -887,24 +910,42 @@ if (knitr::is_html_output()) {
     )
 }
 
-if (nrow(scorefile_metadata) > 0) {
-  if (knitr::is_html_output()) {
-    scorefile_metadata <- scorefile_metadata %>%
-      select(pgs_id, pgp_id, trait_display, n_variants, genome_build)
-    colnames(scorefile_metadata) <- c("PGS", "PGP", "Trait", "N", "Build")
-    print(knitr::kable(scorefile_metadata, escape = FALSE, align = c("l", "l", "l", "r", "l")))
-  } else {
-    scorefile_metadata %>%
-      select(pgs_id, pgp_id, trait_display, n_variants, genome_build) %>%
-      purrr::pwalk(function(pgs_id, pgp_id, trait_display, n_variants, genome_build) {
-        cat("\n\n**Score :** ", pgs_id, "\n\n", sep = "")
-        cat("- **Publication :** ", pgp_id, "\n", sep = "")
-        cat("- **Trait :** ", trait_display, "\n", sep = "")
-        cat("- **Nombre de variants :** ", n_variants, "\n", sep = "")
-        cat("- **Assemblage :** ", genome_build, "\n", sep = "")
-      })
+fmt_emdash <- function(x) {
+  v <- as.character(x)
+  if (length(v) != 1L) {
+    return("—")
   }
+  if (is.na(v) || v == "") "—" else v
 }
+
+merged_scores <- merged_scores %>%
+  dplyr::mutate(
+    Score_disp = dplyr::if_else(is.na(Score), "—", format(round(as.numeric(Score), 2), nsmall = 2)),
+    Percentile_disp = dplyr::if_else(is.na(Percentile), "—", format(round(as.numeric(Percentile), 1), nsmall = 1))
+  )
+
+purrr::pwalk(
+  list(
+    merged_scores[["PGS ID"]],
+    merged_scores[["Condition"]],
+    merged_scores[["Score_disp"]],
+    merged_scores[["Percentile_disp"]],
+    merged_scores[["pgp_id"]],
+    merged_scores[["trait_display"]],
+    merged_scores[["n_variants"]],
+    merged_scores[["genome_build"]]
+  ),
+  function(pid, cond, sc, pct, pub, trait, nv, gb) {
+    cat("\n\n**Score :** ", pid, "\n\n", sep = "")
+    cat("- **Condition :** ", fmt_emdash(cond), "\n", sep = "")
+    cat("- **Score standardisé :** ", fmt_emdash(sc), "\n", sep = "")
+    cat("- **Percentile :** ", fmt_emdash(pct), "\n", sep = "")
+    cat("- **Publication :** ", fmt_emdash(pub), "\n", sep = "")
+    cat("- **Trait :** ", fmt_emdash(trait), "\n", sep = "")
+    cat("- **Nombre de variants :** ", fmt_emdash(nv), "\n", sep = "")
+    cat("- **Assemblage :** ", fmt_emdash(gb), "\n", sep = "")
+  }
+)
 
 ```
 
