@@ -488,44 +488,39 @@ create_bell_curve_purple_viz <- function(patient_id, pgs_id = NULL) {
 
 **ID-1:** `r params$identifier1` · **ID-2:** `r params$identifier2`
 
-::: {.callout-note}
-<!-- ## Ce rapport contient l'analyse des scores de risque polygénique (PGS) pour le patient **`r params$patient_id`**.    -->
+## Indications
 
 **Maladie/s ciblée/s** : <strong>`r indication_display`</strong>
 
-Ce rapport affiche uniquement les scores PGS pertinents pour ces conditions.
+Ce rapport présente des **scores polygéniques** (**PGS**). Les résultats ci-dessous concernent les indications du patient.
 
-:::
-
-::: {.callout-tip}
 ## Objectif de l'analyse
 
-Un score de risque polygénique sert à évaluer le risque génétique d’avoir une condition, de développer cette condition et/ou des complications de cette condition. Ce score est calculé à partir de nombreux changements génétiques mineurs et qui sont fréquents dans la population. Chacun de ces variants a un petit effet sur le risque, mais tous ces effets peuvent être additionnés pour obtenir un score global, ce que représente le score de risque polygénique. Ce score n’est pas un diagnostic, et il ne peut pas prédire avec précision si le patient développera la condition ou des complications de celle-ci. Il s’agit d’une estimation du risque comparativement au reste de la population.
-:::
+Un PGS sert à évaluer le risque génétique d’avoir une condition, de développer cette condition et/ou des complications de cette condition. Ce score est calculé à partir de nombreux changements génétiques mineurs et qui sont fréquents dans la population. Chacun de ces variants a un petit effet sur le risque, mais tous ces effets peuvent être additionnés pour obtenir un score global, ce que représente le score de risque polygénique.
 
-::: {.callout-note}
+Ce score n’est pas un diagnostic, et il ne peut pas prédire avec précision si le patient développera la condition ou des complications de celle-ci. [Il s’agit d’une estimation du risque comparativement au reste de la population](Lambert, S.A., Wingfield, B. et al. (2024) Enhancing the Polygenic Score Catalog with tools for score calculation and ancestry normalization. *Nature Genetics*. doi:10.1038/s41588-024-01937-x.).
+
 ## Méthodologie
 
-**brief NGS description (clinical team)**: ***-----------***.
+Les analyses du Laboratoire de diagnostic moléculaire de l'Institut de cardiologie de Montréal sont réalisées par séquençage parallèle à haut débit du génome entier (Whole Genome Sequencing; WGS) sur la plateforme NovaSeq X Plus (Illumina). Les librairies sont préparées à l’aide de la trousse Illumina DNA PCR-Free Library Prep, conformément aux recommandations du manufacturier, puis séquencées de manière à atteindre une couverture moyenne cible ≥ 30X, assurant ainsi une couverture fiable sur la vaste majorité des régions du génome.
 
-**Calcul des scores PGS (pgsc-calc)** : Les analyses primaires et secondaires sont réalisées dans un environnement infonuagique sécurisé intégrant les pipelines BCL Convert et DRAGEN Germline (Illumina). Les fichiers de variants (VCF) générés par le pipeline DRAGEN Germline sont utilisés comme données d’entrée pour le calcul des scores de risque polygénique (PGS). Le score polygénique est calculé comme la somme pondérée des allèles de risque portés par l’individu. Le workflow [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) (version 2.0.1) automatise le téléchargement des fichiers de score depuis le PGS Catalog, l’appariement des variants et le calcul des PGS [^1]. En raison de l’impact de l’ascendance génétique sur la distribution des PGS, les scores sont ensuite contextualisés avec le module d’ascendance de pgsc-calc : un panel de référence (1000 Genomes + HGDP) est utilisé pour une analyse en composantes principales, chaque individu cible est projeté dans cet espace afin d’identifier la population de référence la plus proche, et le percentile est rapporté en comparant le PGS de l’individu à la distribution observée dans cette population [^2]. 
-:::
+Les étapes d’analyse primaire et secondaire sont effectuées dans un environnement infonuagique sécurisé intégrant les pipelines BCL Convert et DRAGEN Germline (Illumina). Les fichiers de variants (VCF) générés par DRAGEN Germline sont utilisés comme entrée pour le calcul de PGS. Les variations d’un seul nucléotide (SNV) sont détectées par cette méthode avec une sensibilité analytique de 99,92% et une spécificité analytique supérieure à 99,999%. Les variants sont rapportés selon le génome de référence GRCh38/hg38 alt masked graph v5. Certaines régions du génome présentent des caractéristiques intrinsèques (duplications segmentales, régions répétées ou faible complexité) pouvant affecter la qualité de l’alignement et, par conséquent, la sensibilité et la spécificité de détection des variants. De plus, certaines régions peuvent présenter une couverture inférieure au seuil analytique visé.
 
-::: {.callout-warning}
+Pour chaque modèle de PGS issu du **[PGS Catalog](https://www.pgscatalog.org/)** (*Polygenic Score Catalog*, répertoire ouvert regroupant des scores publiés et les métadonnées utiles à leur application rigoureuse), les génotypes observés sont interrogés spécifiquement aux positions génomiques définies afin de déterminer les allèles portés par l’individu. Le workflow [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) (version 2.0.1) automatise le téléchargement des fichiers de score du PGS Catalog, l’appariement des variants et le calcul des PGS.
+
+En raison de l’impact de l’ascendance génétique sur la distribution des PGS, les scores sont ensuite contextualisés avec [le module d’ascendance de pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/explanation/geneticancestry.html) : un panel de référence (1000 Genomes Project et Human Genome Diversity Project [HGDP]) est utilisé pour une analyse des composantes principales, chaque individu cible est projeté dans cet espace afin d’identifier la population de référence la plus proche, et le percentile est rapporté en comparant le PGS de l’individu à la distribution observée dans cette population.
+
+Cette analyse a été réalisée dans un laboratoire médical accrédité par le Conseil canadien des normes (CCN) et est conforme aux exigences de la norme internationale ISO 15189:2022 ainsi qu'aux conditions d'accréditation établies par le CCN (Laboratoire accrédité # 906, Dossier CCN #151189).
+
 ## Limites des scores de risque polygéniques
-Les scores de risque polygénique ne prennent pas en compte tous les facteurs influençant le risque de développer une condition, comme des variants génétiques plus rares, l'âge, les comorbidités et les habitudes de vie. Ils servent d'indicateurs prédictifs et ne constituent pas un outil diagnostique. Ces scores comportent une marge d'incertitude significative; ainsi, un individu avec un score élevé peut ne jamais développer la condition, tandis qu'un individu avec un score faible peut développer la condition. <br />
 
-De plus, la validité des estimations de risque est directement liée à la ressemblance avec les cohortes initiales ayant servi à l’élaboration du score. Par exemple, un score polygénique développé dans une population d’origine ancestrale européenne aura une performance plus élevée chez les individus d’origine ancestrale européenne que des individus d’autres origines. Au fait, les scores de risque polygénique sont principalement basés sur des données génomiques d'individus d'origine ethnique européenne. Bien qu’une méthode d'ajustement basée sur l'ascendance est appliquée (PMID: 39327485), cette correction améliore la généralisation des scores chez des individus de différentes origines, mais elle ne permet pas d'éliminer totalement le biais de généralisation. Les scores de risque polygéniques peuvent donc être moins fiables chez les personnes issues de populations non européennes.
-:::
+Les PGS ne prennent pas en compte tous les facteurs influençant le risque de développer une condition, comme des variants génétiques plus rares, l'âge, les comorbidités et les habitudes de vie. Ils servent d'indicateurs prédictifs et ne constituent pas un outil diagnostique. Ces scores comportent une marge d'incertitude significative; ainsi, un individu avec un score élevé peut ne jamais développer la condition, tandis qu'un individu avec un score faible peut développer la condition.
 
-[^1]: Lambert, S.A., Wingfield, B. et al. (2024) Enhancing the Polygenic Score Catalog with tools for score calculation and ancestry normalization. *Nature Genetics*. doi:10.1038/s41588-024-01937-x.
+De plus, la validité des estimations de risque est directement liée à la ressemblance avec les cohortes initiales ayant servi à l’élaboration du score. Par exemple, un PGS développé dans une population d’origine ancestrale européenne aura une performance plus élevée chez les individus d’origine ancestrale européenne que des individus d’autres origines. Au fait, les PGS sont principalement basés sur des données génomiques d'individus d'origine ethnique européenne. Bien qu’une méthode d'ajustement basée sur l'ascendance est appliquée (PMID: 39327485), cette correction améliore la généralisation des scores chez des individus de différentes origines, mais elle ne permet pas d'éliminer totalement le biais de généralisation. Les PGS peuvent donc être moins fiables chez les personnes issues de populations non européennes.
 
-[^2]: [Ancestry adjustment documentation](https://pgsc-calc.readthedocs.io/en/latest/explanation/geneticancestry.html).
+## Comment lire le graphique de risque polygénique ?
 
-::: {.callout-important}
-## Comment lire le graphique de risque polygénique?
-Le graphique montre où se situe le score de risque polygénique du patient (ligne verticale) par rapport à la population générale ayant une origine ancestrale semblable. La plupart des personnes ont un score situé vers le centre de la courbe, ce qui correspond à un risque génétique moyen. Moins de personnes se trouvent aux extrémités. Un score plus à gauche indique un risque plus faible que la moyenne. Un score au centre indique un risque moyen. Un score plus à droite indique un risque plus élevé que la moyenne. Les détails des scores utilisés dans ces graphiques se trouvent à la fin du Rapport.
-:::
+Le graphique montre où se situe le PGS du patient (ligne verticale) par rapport à la population générale ayant une origine ancestrale semblable. La plupart des personnes ont un score situé vers le centre de la courbe, ce qui correspond à un risque génétique moyen. Moins de personnes se trouvent aux extrémités. Un score plus à gauche indique un risque plus faible que la moyenne. Un score au centre indique un risque moyen. Un score plus à droite indique un risque plus élevé que la moyenne. Les détails des PGS utilisés dans ces graphiques se trouvent à la fin du Rapport.
 
 ```{r generate-sections, results='asis', echo=FALSE, warning=FALSE, message=FALSE, fig.width=14, fig.height=9, out.width="100%"}
 #| fig-width: 14

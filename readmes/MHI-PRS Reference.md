@@ -2,7 +2,7 @@
 ### mhi - report
 ---
 
-- [ ] #work mhi-wgs-prs   organize meeting + review pipeline/workflow  ⏳ 2026-05-01
+- [ ] #work mhi-wgs-prs   organize meeting after gettting last version of report + review pipeline/workflow  ⏳ 2026-05-06
 	- **Report**: add methodology, do a clean text revision, add 2 identifiers at top, at the bottom right page for each page of the report
 		- need Rafik requested PGS for each id
 		- will need to contact and prepare script to update ica report html output 
