@@ -1,5 +1,6 @@
 ---
 title: "Analyse du risque polygénique "
+lang: fr
 format:
   pdf:
     toc: false
@@ -498,7 +499,7 @@ Ce rapport présente des **scores polygéniques** (**PGS**). Les résultats ci-d
 
 Un PGS sert à évaluer le risque génétique d’avoir une condition, de développer cette condition et/ou des complications de cette condition. Ce score est calculé à partir de nombreux changements génétiques mineurs et qui sont fréquents dans la population. Chacun de ces variants a un petit effet sur le risque, mais tous ces effets peuvent être additionnés pour obtenir un score global, ce que représente le score de risque polygénique.
 
-Ce score n’est pas un diagnostic, et il ne peut pas prédire avec précision si le patient développera la condition ou des complications de celle-ci. [Il s’agit d’une estimation du risque comparativement au reste de la population](Lambert, S.A., Wingfield, B. et al. (2024) Enhancing the Polygenic Score Catalog with tools for score calculation and ancestry normalization. *Nature Genetics*. doi:10.1038/s41588-024-01937-x.).
+Ce score n’est pas un diagnostic, et il ne peut pas prédire avec précision si le patient développera la condition ou des complications de celle-ci. Il s’agit d’une estimation du risque comparativement au reste de la population[^ref-lambert].
 
 ## Méthodologie
 
@@ -506,11 +507,19 @@ Les analyses du Laboratoire de diagnostic moléculaire de l'Institut de cardiolo
 
 Les étapes d’analyse primaire et secondaire sont effectuées dans un environnement infonuagique sécurisé intégrant les pipelines BCL Convert et DRAGEN Germline (Illumina). Les fichiers de variants (VCF) générés par DRAGEN Germline sont utilisés comme entrée pour le calcul de PGS. Les variations d’un seul nucléotide (SNV) sont détectées par cette méthode avec une sensibilité analytique de 99,92% et une spécificité analytique supérieure à 99,999%. Les variants sont rapportés selon le génome de référence GRCh38/hg38 alt masked graph v5. Certaines régions du génome présentent des caractéristiques intrinsèques (duplications segmentales, régions répétées ou faible complexité) pouvant affecter la qualité de l’alignement et, par conséquent, la sensibilité et la spécificité de détection des variants. De plus, certaines régions peuvent présenter une couverture inférieure au seuil analytique visé.
 
-Pour chaque modèle de PGS issu du **[PGS Catalog](https://www.pgscatalog.org/)** (*Polygenic Score Catalog*, répertoire ouvert regroupant des scores publiés et les métadonnées utiles à leur application rigoureuse), les génotypes observés sont interrogés spécifiquement aux positions génomiques définies afin de déterminer les allèles portés par l’individu. Le workflow [pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/) (version 2.0.1) automatise le téléchargement des fichiers de score du PGS Catalog, l’appariement des variants et le calcul des PGS.
+Pour chaque modèle de PGS issu du **PGS Catalog**[^url-pgscatalog] (*Polygenic Score Catalog*, répertoire ouvert regroupant des scores publiés et les métadonnées utiles à leur application rigoureuse), les génotypes observés sont interrogés spécifiquement aux positions génomiques définies afin de déterminer les allèles portés par l’individu. Le workflow **pgsc-calc**[^url-pgscalc] (version 2.0.1) automatise le téléchargement des fichiers de score du PGS Catalog, l’appariement des variants et le calcul des PGS.
 
-En raison de l’impact de l’ascendance génétique sur la distribution des PGS, les scores sont ensuite contextualisés avec [le module d’ascendance de pgsc-calc](https://pgsc-calc.readthedocs.io/en/latest/explanation/geneticancestry.html) : un panel de référence (1000 Genomes Project et Human Genome Diversity Project [HGDP]) est utilisé pour une analyse des composantes principales, chaque individu cible est projeté dans cet espace afin d’identifier la population de référence la plus proche, et le percentile est rapporté en comparant le PGS de l’individu à la distribution observée dans cette population.
+En raison de l’impact de l’ascendance génétique sur la distribution des PGS, les scores sont ensuite contextualisés avec le module d’ascendance de pgsc-calc[^url-pgscalc-ancestry] : un panel de référence (1000 Genomes Project et Human Genome Diversity Project [HGDP]) est utilisé pour une analyse des composantes principales, chaque individu cible est projeté dans cet espace afin d’identifier la population de référence la plus proche, et le percentile est rapporté en comparant le PGS de l’individu à la distribution observée dans cette population.
 
 Cette analyse a été réalisée dans un laboratoire médical accrédité par le Conseil canadien des normes (CCN) et est conforme aux exigences de la norme internationale ISO 15189:2022 ainsi qu'aux conditions d'accréditation établies par le CCN (Laboratoire accrédité # 906, Dossier CCN #151189).
+
+[^ref-lambert]: Lambert SA, Wingfield B, *et al.* (2024). *Enhancing the Polygenic Score Catalog with tools for score calculation and ancestry normalization.* *Nature Genetics.* <https://doi.org/10.1038/s41588-024-01937-x>
+
+[^url-pgscatalog]: <https://www.pgscatalog.org/>
+
+[^url-pgscalc]: <https://pgsc-calc.readthedocs.io/en/latest/>
+
+[^url-pgscalc-ancestry]: <https://pgsc-calc.readthedocs.io/en/latest/explanation/geneticancestry.html>
 
 ## Limites des scores de risque polygéniques
 
@@ -884,11 +893,6 @@ if (knitr::is_html_output()) {
 } else {
   merged_scores <- merged_scores %>%
     mutate(
-      pgp_id = ifelse(
-        grepl("^PGP[0-9]+$", pgp_id),
-        stringr::str_glue("[{pgp_id}](https://www.pgscatalog.org/publication/{pgp_id})"),
-        pgp_id
-      ),
       trait_display = stringr::str_replace_all(trait_display, "<br\\s*/?>", "; "),
       trait_display = stringr::str_replace_all(trait_display, "<[^>]+>", ""),
       n_variants = as.character(n_variants),
